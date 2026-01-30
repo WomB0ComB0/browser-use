@@ -5,7 +5,6 @@ import os
 import re
 import subprocess
 import time
-from typing import Dict, List
 
 # Version: 1.2
 CACHE_FILE = os.path.expanduser("~/.cache/ralph/model_segments.json")
@@ -27,7 +26,7 @@ def extract_version(name: str) -> float:
     return 0.0
 
 
-def get_available_models() -> List[str]:
+def get_available_models() -> list[str]:
     """Get list of available models from opencode or fallback list."""
     try:
         result = subprocess.run(
@@ -50,8 +49,8 @@ def get_available_models() -> List[str]:
 
 
 def _filter_models(
-    models: List[str], includes: List[str], excludes: List[str] = None
-) -> List[str]:
+    models: list[str], includes: list[str], excludes: list[str] | None = None
+) -> list[str]:
     """Filter models by inclusion/exclusion keywords and sort by version."""
     if excludes is None:
         excludes = []
@@ -64,7 +63,7 @@ def _filter_models(
     return sorted(filtered, key=extract_version, reverse=True)
 
 
-def discover_and_segment() -> Dict[str, List[str]]:
+def discover_and_segment() -> dict[str, list[str]]:
     """Segment available models into functional roles."""
     available = get_available_models()
     if not available:
@@ -96,7 +95,7 @@ def discover_and_segment() -> Dict[str, List[str]]:
     return segments
 
 
-def _load_model_segments() -> Dict[str, List[str]]:
+def _load_model_segments() -> dict[str, list[str]]:
     """Load model segments from cache or discover and save to cache."""
     current_time = time.time()
     if os.path.exists(CACHE_FILE) and (current_time - os.path.getmtime(CACHE_FILE)) < CACHE_TTL:

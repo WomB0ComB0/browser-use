@@ -10,6 +10,7 @@ watchdog>=3.0
 # CLI
 typer>=0.9
 rich>=13.0
+python-dotenv>=1.0.0
 
 # AI/LLM
 langchain-google-genai>=1.0

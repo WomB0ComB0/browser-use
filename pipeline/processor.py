@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from pipeline.config import PipelineConfig
 from pipeline.extractors import get_extractor_for_file
 from pipeline.generators import BaseGenerator, get_generator
+from pipeline.memory.pinecone_service import PineconeMemory
 from pipeline.utils.logging import get_logger, setup_logging
 from pipeline.utils.metrics import PipelineMetrics
 from pipeline.watcher import FileWatcher
@@ -23,9 +24,10 @@ class PipelineProcessor:
         self.logger: Logger = get_logger(__name__)
         self.metrics = PipelineMetrics()
         self.generator: BaseGenerator | None = None
+        self.memory: PineconeMemory | None = None
         self.watcher: FileWatcher | None = None
         self._processing_queue: asyncio.Queue[Path] = asyncio.Queue()
-        self._shutdown = False
+        self._shutdown: bool = False
         self._workers: list[asyncio.Task[None]] = []
     
     def initialize(self) -> None:
@@ -44,6 +46,12 @@ class PipelineProcessor:
         
         # Initialize generator using factory
         self.generator = get_generator(self.config)
+        
+        # Initialize memory
+        self.memory = PineconeMemory(self.config)
+        if self.memory.enabled:
+            self.memory._initialize()  # Pre-initialize to check connection
+
         
         self.logger.info("Pipeline initialized")
     
@@ -86,6 +94,21 @@ class PipelineProcessor:
             instructions.save(output_path)
             
             self.logger.info(f"Generated: {output_path}")
+
+            # Store in memory
+            if getattr(self, "memory", None) and self.memory.enabled:
+                self.logger.info(f"Storing in memory: {file_path.name}")
+                self.memory.upsert(
+                    content=instructions.instructions,
+                    source_file=file_path.name,
+                    metadata={
+                        "type": "instruction_generation",
+                        "file_type": content.file_type,
+                        "output_path": str(output_path),
+                        "model": instructions.model_used
+                    }
+                )
+
             self.metrics.end_processing(success=True)
             
             return True

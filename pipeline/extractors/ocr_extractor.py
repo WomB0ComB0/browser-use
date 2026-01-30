@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from PIL import Image
 
@@ -24,16 +25,21 @@ except ImportError:
 from pipeline.extractors.base import BaseExtractor, ExtractedContent
 from pipeline.utils.logging import get_logger
 
+if TYPE_CHECKING:
+    from logging import Logger
+
+    from easyocr import Reader
+
 
 class OCRExtractor(BaseExtractor):
     """Extractor using EasyOCR for scanned documents."""
 
-    def __init__(self, languages: list[str] | None = None):
-        self.logger = get_logger(__name__)
-        self._reader = None
-        self._languages = languages or ['en']
+    def __init__(self, languages: list[str] | None = None) -> None:
+        self.logger: Logger = get_logger(__name__)
+        self._reader: Reader | None = None
+        self._languages: list[str] = languages or ['en']
 
-    def _load_model(self):
+    def _load_model(self) -> None:
         """Lazy load the EasyOCR reader."""
         if self._reader is None and EASYOCR_AVAILABLE:
             self.logger.info(f"Loading EasyOCR model for languages: {self._languages}")
@@ -99,7 +105,7 @@ class OCRExtractor(BaseExtractor):
             self.logger.error(f"OCR extraction failed for {file_path}: {e}")
             return self._create_error_result(file_path, metadata, str(e))
 
-    def _create_error_result(self, file_path, metadata, error_msg):
+    def _create_error_result(self, file_path: Path, metadata: dict[str, Any], error_msg: str) -> ExtractedContent:
         return ExtractedContent(
             content=f"Error extracting content via OCR: {error_msg}",
             summary=f"Failed to extract content: {error_msg}",

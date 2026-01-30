@@ -7,7 +7,9 @@ from unittest.mock import MagicMock, patch
 # sys.modules mocks removed to allow real imports in verified environment
 from pipeline.config import PipelineConfig
 from pipeline.extractors.ocr_extractor import OCRExtractor
+from pipeline.generators.base import GeneratedInstructions
 from pipeline.memory.pinecone_service import PineconeMemory
+from pipeline.processor import PipelineProcessor
 from pipeline.watcher import DebouncedHandler
 
 
@@ -112,6 +114,62 @@ class TestIntegration(unittest.TestCase):
         results = memory.query("query")
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["content"], "Result content")
+
+    @patch("pipeline.processor.get_extractor_for_file")
+    @patch("pipeline.processor.get_generator")
+    @patch("pipeline.processor.PineconeMemory")
+    def test_processor_memory_integration(self, mock_memory_class, mock_get_generator, mock_get_extractor):
+        """Test that PipelineProcessor uses memory when enabled."""
+        # 1. Setup Logic
+        # Mock Memory
+        mock_memory_instance = MagicMock()
+        mock_memory_instance.enabled = True
+        mock_memory_class.return_value = mock_memory_instance
+        
+        # 2. Execution
+        # We need to run async process_file
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        # Mock Generator
+        mock_generator = MagicMock()
+        mock_generated_instructions = GeneratedInstructions(
+            instructions="Output markdown",
+            title="Title",
+            source_file=Path("test.txt"),
+            source_type="txt",
+            model_used="test-model"
+        )
+        # Create future attached to the loop we just set
+        future = loop.create_future()
+        future.set_result(mock_generated_instructions)
+        mock_generator.generate.return_value = future
+        mock_get_generator.return_value = mock_generator
+
+        processor = PipelineProcessor(self.config)
+        processor.generator = mock_generator # Manually set since we skip initialize()
+        processor.memory = mock_memory_instance # Manually set memory since we skip initialize()
+        # Manually set memory instance if __init__ mocking is tricky, 
+        # but mock_memory_class should handle the instantiation in __init__
+        
+        test_file = Path("test.txt")
+        # Touch file so .stat() works
+        with open("test.txt", "w") as f:
+            f.write("content")
+            
+        try:
+            loop.run_until_complete(processor.process_file(test_file))
+        finally:
+            Path("test.txt").unlink(missing_ok=True)
+            loop.close()
+
+        # 3. Verification
+        # Check that upsert was called
+        mock_memory_instance.upsert.assert_called_once()
+        call_args = mock_memory_instance.upsert.call_args
+        self.assertEqual(call_args.kwargs["content"], "Output markdown")
+        self.assertEqual(call_args.kwargs["source_file"], "test.txt")
+
 
 if __name__ == "__main__":
     unittest.main()

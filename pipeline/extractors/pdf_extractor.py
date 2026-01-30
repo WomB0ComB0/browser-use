@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from pipeline.extractors.base import BaseExtractor, ExtractedContent
 from pipeline.extractors.ocr_extractor import OCRExtractor
@@ -101,7 +101,7 @@ class PdfExtractor(BaseExtractor):
                 metadata={"error": str(e)},
             )
 
-    def _build_structure(self, reader: PdfReader, pdf_metadata) -> PdfStructure:
+    def _build_structure(self, reader: PdfReader, pdf_metadata: dict[str, Any] | None) -> PdfStructure:
         """Build structure information from PDF metadata."""
         structure: PdfStructure = {
             "page_count": len(reader.pages),

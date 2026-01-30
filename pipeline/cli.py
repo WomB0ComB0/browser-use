@@ -5,11 +5,15 @@ import signal
 from pathlib import Path
 
 import typer
+from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
 
 from pipeline.config import PipelineConfig
 from pipeline.processor import PipelineProcessor
+
+# Load environment variables
+load_dotenv()
 
 app = typer.Typer(
     name="pipeline",

@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import uuid
 from datetime import datetime
-from typing import Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 try:
     from pinecone import Pinecone, ServerlessSpec
@@ -20,6 +20,12 @@ except ImportError:
 from pipeline.config import PipelineConfig
 from pipeline.utils.logging import get_logger
 
+if TYPE_CHECKING:
+    from logging import Logger
+
+    from pinecone import Index, Pinecone
+    from sentence_transformers import SentenceTransformer
+
 
 class MemoryEntry(TypedDict):
     """Structure of a memory entry."""
@@ -32,14 +38,14 @@ class MemoryEntry(TypedDict):
 class PineconeMemory:
     """Memory service using Pinecone vector database."""
 
-    def __init__(self, config: PipelineConfig):
-        self.config = config
-        self.logger = get_logger(__name__)
-        self._client = None
-        self._index = None
-        self._model = None
+    def __init__(self, config: PipelineConfig) -> None:
+        self.config: PipelineConfig = config
+        self.logger: Logger = get_logger(__name__)
+        self._client: Pinecone | None = None
+        self._index: Index | None = None
+        self._model: SentenceTransformer | None = None
         
-        self.enabled = PINECONE_AVAILABLE and SENTENCE_TRANSFORMERS_AVAILABLE
+        self.enabled: bool = PINECONE_AVAILABLE and SENTENCE_TRANSFORMERS_AVAILABLE
         if not self.enabled:
             self.logger.warning("Pinecone or Sentence Transformers not available. Memory disabled.")
             return
@@ -51,7 +57,7 @@ class PineconeMemory:
             self.logger.warning("No Pinecone API key found. Memory disabled.")
             self.enabled = False
 
-    def _initialize(self):
+    def _initialize(self) -> None:
         """Lazy initialization of Pinecone client and model."""
         if not self.enabled or self._client:
             return
