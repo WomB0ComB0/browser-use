@@ -36,8 +36,8 @@ class ExcelExtractor(BaseExtractor):
 
     SUPPORTED_EXTENSIONS = [".xlsx", ".xlsm"]
 
-    def can_extract(self, file_path: Path) -> bool:
-        """Check if this extractor can handle the file."""
+    def supports(self, file_path: Path) -> bool:
+        """Check if this extractor supports the given file."""
         return file_path.suffix.lower() in self.SUPPORTED_EXTENSIONS
 
     def extract(self, file_path: Path) -> ExtractedContent:
@@ -105,42 +105,11 @@ class ExcelExtractor(BaseExtractor):
 
     def _extract_sheet(self, sheet, sheet_name: str) -> tuple[str, SheetInfo]:
         """Extract content and info from a single worksheet."""
-        rows_data = []
-        headers = []
+        rows_data = self._get_rows_data(sheet)
+        headers = rows_data[0] if rows_data else []
 
-        for row_idx, row in enumerate(sheet.iter_rows(max_row=100, values_only=True)):
-            # Convert None values to empty strings
-            row_values = [str(cell) if cell is not None else "" for cell in row]
-
-            if row_idx == 0:
-                headers = row_values
-            rows_data.append(row_values)
-
-        # Build content as markdown table
-        content_lines = []
-        if rows_data:
-            # Header row
-            header_row = rows_data[0] if rows_data else []
-            content_lines.append("| " + " | ".join(header_row[:10]) + " |")
-            content_lines.append("| " + " | ".join(["---"] * min(len(header_row), 10)) + " |")
-
-            # Data rows (first 20)
-            for row in rows_data[1:21]:
-                content_lines.append("| " + " | ".join(row[:10]) + " |")
-
-            if len(rows_data) > 21:
-                content_lines.append(f"\n*... and {len(rows_data) - 21} more rows*")
-
-        # Determine data types from first few values
-        data_types = []
-        if len(rows_data) > 1:
-            for col_idx in range(min(len(headers), 10)):
-                sample_values = [
-                    rows_data[row_idx][col_idx]
-                    for row_idx in range(1, min(6, len(rows_data)))
-                    if col_idx < len(rows_data[row_idx])
-                ]
-                data_types.append(self._detect_column_type(sample_values))
+        content = self._format_sheet_markdown(rows_data)
+        data_types = self._detect_column_types_from_rows(rows_data, len(headers))
 
         sheet_info: SheetInfo = {
             "name": sheet_name,
@@ -151,7 +120,51 @@ class ExcelExtractor(BaseExtractor):
             "sample_values": rows_data[1:4] if len(rows_data) > 1 else [],
         }
 
-        return "\n".join(content_lines), sheet_info
+        return content, sheet_info
+
+    def _get_rows_data(self, sheet) -> list[list[str]]:
+        """Extract row data from a sheet, converting None to empty string."""
+        rows_data = []
+        for row in sheet.iter_rows(max_row=100, values_only=True):
+            row_values = [str(cell) if cell is not None else "" for cell in row]
+            rows_data.append(row_values)
+        return rows_data
+
+    def _format_sheet_markdown(self, rows_data: list[list[str]]) -> str:
+        """Format sheet data as a markdown table."""
+        if not rows_data:
+            return ""
+
+        content_lines = []
+        # Header row
+        header_row = rows_data[0]
+        content_lines.append("| " + " | ".join(header_row[:10]) + " |")
+        content_lines.append("| " + " | ".join(["---"] * min(len(header_row), 10)) + " |")
+
+        # Data rows (first 20)
+        for row in rows_data[1:21]:
+            content_lines.append("| " + " | ".join(row[:10]) + " |")
+
+        if len(rows_data) > 21:
+            content_lines.append(f"\n*... and {len(rows_data) - 21} more rows*")
+
+        return "\n".join(content_lines)
+
+    def _detect_column_types_from_rows(self, rows_data: list[list[str]], col_count: int) -> list[str]:
+        """Determine data types for the first few columns."""
+        data_types = []
+        if len(rows_data) <= 1:
+            return data_types
+
+        for col_idx in range(min(col_count, 10)):
+            sample_values = []
+            for row_idx in range(1, min(6, len(rows_data))):
+                if col_idx < len(rows_data[row_idx]):
+                    sample_values.append(rows_data[row_idx][col_idx])
+            
+            data_types.append(self._detect_column_type(sample_values))
+        
+        return data_types
 
     def _detect_column_type(self, values: list[str]) -> str:
         """Detect the predominant type of values in a column."""

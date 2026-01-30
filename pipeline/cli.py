@@ -74,7 +74,7 @@ def process(
     processor = PipelineProcessor(cfg)
     
     async def run() -> bool:
-        await processor.initialize()
+        processor.initialize()
         success = await processor.process_file(file)
         return success
     

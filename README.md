@@ -305,7 +305,6 @@ pipeline/
 5. **Open** a Pull Request.
 
 ## Roadmap & Known Issues
-- [ ] **Roadmap**: Support for Microsoft Graph/SharePoint ingestion.
 - [ ] **Roadmap**: Vector database integration for RAG-based instruction generation.
 - [ ] **Roadmap**: Built-in cost estimator for Gemini API usage.
 - ⚠️ **Issue**: PDF extraction may fail on heavily scanned images without OCR.

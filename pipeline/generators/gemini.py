@@ -60,7 +60,19 @@ class GeminiGenerator(BaseGenerator):
         # Generate response
         try:
             response = await self.llm.ainvoke(prompt)
-            instructions: str = response.content
+            response_content = response.content
+            if isinstance(response_content, list):
+                # Handle cases where response_content is a list of parts
+                instructions: str = ""
+                for part in response_content:
+                    if isinstance(part, dict) and "text" in part:
+                        instructions += part["text"]
+                    else:
+                        instructions += str(part)
+            elif isinstance(response_content, dict) and "text" in response_content:
+                instructions = str(response_content["text"])
+            else:
+                instructions = str(response_content)
             
             # Extract token usage if available
             tokens_used: int | None = None

@@ -91,7 +91,8 @@ class PipelineProcessor:
             return True
             
         except Exception as e:
-            self.logger.error(f"Error processing {file_path}: {e}")
+            import traceback
+            self.logger.error(f"Error processing {file_path}: {e}\n{traceback.format_exc()}")
             self.metrics.end_processing(success=False, error=str(e))
             return False
     
