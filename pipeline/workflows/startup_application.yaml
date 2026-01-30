@@ -1,0 +1,66 @@
+# Startup Application Workflow
+# Extracts and refines data for hacker house and startup applications
+
+name: startup_application
+description: >
+  A multi-agent workflow for extracting core startup details 
+  and refining them for competitive application forms.
+
+steps:
+  - name: analyze_startup
+    role: planner
+    action: analyze
+    prompt_template: |
+      Analyze this startup document and identify:
+      1. Core problem being solved
+      2. Unique solution/value proposition
+      3. Target market and traction
+      4. Team background and relevant expertise
+      5. Any specific "Hacker House" or incubator-friendly traits (technical depth, high growth potential)
+    max_retries: 1
+
+  - name: extract_form_data
+    role: engineer
+    action: extract
+    input_from: analyze_startup
+    prompt_template: |
+      Based on the analysis, extract the following fields in a concise format:
+      - Startup Name:
+      - One-line pitch:
+      - Problem (max 200 chars):
+      - Solution (max 200 chars):
+      - Market Size/Opportunity:
+      - Current Traction/KPIs:
+      - Founders & Roles:
+      - Technical Stack:
+      
+      Analysis provided:
+      {previous_output}
+    max_retries: 2
+
+  - name: refine_pitch
+    role: reviewer
+    action: optimize
+    input_from: extract_form_data
+    prompt_template: |
+      Optimize the pitch for a hacker house application.
+      The tone should be ambitious, technical, and data-driven.
+      
+      Extracted data to refine:
+      {previous_output}
+      
+      Final Output MUST include:
+      1. A polished Markdown summary of the startup.
+      2. A STRICT structured JSON block at the very end for our database.
+      
+      The JSON MUST be in a ```json code block and STRICTLY follow this schema:
+      {
+        "startup_name": "string",
+        "one_liner": "string",
+        "founder_names": ["string"],
+        "problem": "string",
+        "solution": "string",
+        "target_market": "string",
+        "technical_stack": "string"
+      }
+    max_retries: 1

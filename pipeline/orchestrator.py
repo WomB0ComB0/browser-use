@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -223,6 +225,25 @@ class AgentOrchestrator:
 
         return outputs
 
+    def extract_json_from_output(self, output: str) -> dict[str, Any] | None:
+        """Extract JSON block from agent output."""
+        try:
+            # Look for JSON between code blocks
+            match = re.search(r"```json\s*(.*?)\s*```", output, re.DOTALL)
+            if match:
+                return json.loads(match.group(1))
+            
+            # Fallback to finding anything that looks like a JSON object
+            # Finding the first { and the last } in the string
+            start = output.find('{')
+            end = output.rfind('}')
+            if start != -1 and end != -1 and end > start:
+                json_str = output[start:end+1]
+                return json.loads(json_str)
+        except ValueError:
+            pass
+        return None
+
     def create_code_review_workflow(self) -> WorkflowConfig:
         """Create a pre-defined code review workflow."""
         return {
@@ -283,6 +304,38 @@ class AgentOrchestrator:
                     "action": "summarize",
                     "input_from": "analyze",
                     "prompt_template": "Create an executive summary: {previous_output}",
+                    "max_retries": 1,
+                },
+            ],
+            "parallel_steps": [],
+        }
+    def create_startup_application_workflow(self) -> WorkflowConfig:
+        """Create a pre-defined startup application workflow."""
+        return {
+            "name": "startup_application",
+            "description": "Multi-agent startup application extraction workflow",
+            "steps": [
+                {
+                    "name": "analyze_startup",
+                    "role": "planner",
+                    "action": "analyze",
+                    "prompt_template": "Analyze this startup document and identify core themes for a hacker house application.",
+                    "max_retries": 1,
+                },
+                {
+                    "name": "extract_form_data",
+                    "role": "engineer",
+                    "action": "extract",
+                    "input_from": "analyze_startup",
+                    "prompt_template": "Extract concise form-ready fields (founder, mission, tech stack) from: {previous_output}",
+                    "max_retries": 2,
+                },
+                {
+                    "name": "refine_pitch",
+                    "role": "reviewer",
+                    "action": "optimize",
+                    "input_from": "extract_form_data",
+                    "prompt_template": "Refine the extraction for a hacker house application. Output final pitch and a JSON block for auto-filling.",
                     "max_retries": 1,
                 },
             ],

@@ -140,6 +140,44 @@ class PipelineMetrics:
         
         with open(output_path, "w") as f:
             json.dump(data, f, indent=2)
+
+    @classmethod
+    def from_file(cls, input_path: Path) -> PipelineMetrics:
+        """Load metrics from a JSON file."""
+        metrics = cls()
+        if not input_path.exists():
+            return metrics
+            
+        try:
+            with open(input_path) as f:
+                data = json.load(f)
+                
+            metrics.files_processed = data.get("files_processed", 0)
+            metrics.files_succeeded = data.get("files_succeeded", 0)
+            metrics.files_failed = data.get("files_failed", 0)
+            metrics.total_bytes_processed = data.get("total_bytes_processed", 0)
+            
+            if "started_at" in data:
+                metrics.started_at = datetime.fromisoformat(data["started_at"])
+                
+            # Load records if present
+            for r in data.get("records", []):
+                record = ProcessingRecord(
+                    file_path=r["file_path"],
+                    file_type=r["file_type"],
+                    file_size=r["file_size"],
+                    start_time=time.time() - r.get("duration_seconds", 0), # Approximation
+                    end_time=time.time(),
+                    success=r["success"],
+                    error=r.get("error")
+                )
+                metrics.records.append(record)
+                
+        except Exception:
+            # If load fails, return empty metrics
+            pass
+            
+        return metrics
     
     def print_summary(self) -> str:
         """Get a formatted summary for display."""

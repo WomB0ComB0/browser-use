@@ -9,7 +9,7 @@ import time
 # Version: 1.2
 CACHE_FILE = os.path.expanduser("~/.cache/ralph/model_segments.json")
 CACHE_TTL = 86400  # 24 hours
-DEFAULT_MODEL = "gemini-1.5-flash"
+DEFAULT_MODEL = "gemini-2.0-flash"
 
 
 def extract_version(name: str) -> float:

@@ -72,7 +72,7 @@ web-based automation tasks.
 
 ### 📊 Operations & Observability
 *   🛡️ **Schema Validation**: Powered by `Pydantic` to ensure configuration and data integrity.
-*   🌈 **Dashboard**: Built-in Streamlit dashboard for monitoring pipeline metrics and processing
+*   🌈 **Dashboard**: Built-in FastAPI/WebSocket dashboard for monitoring pipeline metrics and processing
     status.
 *   🚀 **Structured Logging**: Integrated with `rich` for human-readable terminal output and error
     tracking.
@@ -208,9 +208,9 @@ python run_pipeline.py start --config config.yaml --watch
 ```
 
 ### 2. Running the Monitoring Dashboard
-Launch the Streamlit interface to visualize processing metrics and logs in real-time:
+Launch the real-time interface to visualize processing metrics and logs:
 ```bash
-streamlit run pipeline/dashboard/app.py
+python run_pipeline.py dashboard
 ```
 
 ### 3. Programmatic Integration
@@ -266,16 +266,20 @@ The system is configured via `config.yaml` and environment variables.
 
 ### Config Schema (`config.yaml`)
 ```yaml
-pipeline:
-  data_dir: "./data"
-  output_dir: "./outputs"
+directories:
+  data: "data"
+  output: "output"
+  logs: "logs"
+
+processing:
   supported_extensions: [".pdf", ".csv", ".json", ".xlsx", ".txt"]
-  
-llm:
+  concurrent_workers: 4
+
+generator:
   provider: "gemini" # or "ollama"
-  model: "gemini-2.0-flash"
+  model: "auto"
   temperature: 0.7
-  
+
 watcher:
   recursive: true
   ignore_patterns: ["*.tmp", ".*"]
@@ -284,13 +288,13 @@ watcher:
 ## API Reference
 
 ### `Orchestrator`
-The main entry point for controlling the pipeline lifecycle.
+The high-level manager for complex multi-agent workflows.
 
 | Method | Parameters | Returns | Description |
 | :--- | :--- | :--- | :--- |
-| `start()` | None | `None` | Starts the watcher service. |
-| `stop()` | None | `None` | Gracefully shuts down services. |
-| `process_once()` | `path: str` | `ProcessingResult` | Processes a single file. |
+| `execute_workflow()` | `workflow, content` | `WorkflowResult` | Runs a multi-step agent workflow. |
+| `execute_parallel_steps()` | `steps, context` | `dict` | Runs multiple agents in parallel. |
+| `create_code_review_workflow()` | None | `WorkflowConfig` | Pre-defined code review workflow. |
 
 ### `PipelineProcessor`
 Handles the logic of routing files to extractors and generators.
@@ -323,8 +327,8 @@ Handles the logic of routing files to extractors and generators.
 ## Troubleshooting & FAQ
 
 **Q: My PDF isn't being parsed correctly.**
-> **Solution:** Ensure the PDF is not an image-only scan. If it is, use the `OcrExtractor` which
-> requires `tesseract` installed on your system.
+> **Solution:** Ensure the PDF is not an image-only scan. If it is, the system automatically 
+> triggers the `OCRExtractor` which uses `EasyOCR`. No external dependencies like Tesseract are required.
 
 **Q: Connection error with Ollama.**
 > **Solution:** Verify the Ollama service is running locally (`ollama serve`) and the

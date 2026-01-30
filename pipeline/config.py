@@ -16,7 +16,7 @@ class DirectoriesConfig(BaseModel):
 
 class ProcessingConfig(BaseModel):
     """File processing configuration."""
-    supported_extensions: list[str] = Field(default_factory=lambda: [".txt", ".md", ".json", ".csv"])
+    supported_extensions: list[str] = Field(default_factory=lambda: [".txt", ".md", ".json", ".csv", ".pdf", ".xlsx"])
     max_file_size_mb: int = 50
     concurrent_workers: int = 4
     retry_attempts: int = 3

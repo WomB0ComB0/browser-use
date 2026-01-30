@@ -38,3 +38,6 @@ easyocr>=1.7.0
 pinecone>=3.0.0
 sentence-transformers>=2.3.0
 pdf2image>=1.16.3
+# Browser Automation
+browser-use>=0.1.0
+playwright>=1.40.0

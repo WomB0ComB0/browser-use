@@ -131,10 +131,18 @@ class GeminiGenerator(BaseGenerator):
 """
         
         # Apply template
-        prompt = template.format(
-            file_type=content.file_type,
-            summary=content.summary,
-        )
+        step_prompt = content.metadata.get("step_prompt")
+        previous_output = content.metadata.get("previous_output")
+        
+        if step_prompt:
+            prompt = f"### TASK\n{step_prompt}"
+            if previous_output:
+                prompt += f"\n\n### CONTEXT FROM PREVIOUS STEPS\n{previous_output}"
+        else:
+            prompt = template.format(
+                file_type=content.file_type,
+                summary=content.summary,
+            )
         
         return f"{prompt}\n\n{context}"
     

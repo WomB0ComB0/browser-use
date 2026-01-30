@@ -67,22 +67,40 @@ class DashboardApp:
         @self.app.get("/api/metrics")
         async def get_metrics() -> dict:
             """Get current metrics."""
+            # Reload from disk to catch updates from the processor
+            metrics_path = self.config.get_logs_dir() / "metrics.json"
+            if metrics_path.exists():
+                self.metrics = PipelineMetrics.from_file(metrics_path)
+            
             summary = self.metrics.get_summary()
             return {
                 "files_processed": summary.get("files_processed", 0),
                 "files_failed": summary.get("files_failed", 0),
-                "success_rate": summary.get("success_rate", 0.0),
+                "success_rate": summary.get("success_rate_percent", 0.0) / 100.0,
                 "total_processing_time": summary.get("total_processing_time", 0.0),
-                "avg_processing_time": summary.get("avg_processing_time", 0.0),
+                "avg_processing_time": summary.get("average_processing_time_seconds", 0.0),
                 "total_tokens": summary.get("total_tokens", 0),
             }
 
         @self.app.get("/api/history")
         async def get_history() -> dict:
             """Get processing history."""
+            # Ensure metrics are fresh
+            metrics_path = self.config.get_logs_dir() / "metrics.json"
+            if metrics_path.exists():
+                self.metrics = PipelineMetrics.from_file(metrics_path)
+                
+            history = [
+                {
+                    "file_name": Path(r.file_path).name,
+                    "success": r.success,
+                    "processing_time": r.duration_seconds or 0.0,
+                }
+                for r in reversed(self.metrics.records)
+            ]
             return {
-                "items": [],  # Would be populated from metrics storage
-                "total": 0,
+                "items": history,
+                "total": len(history),
             }
 
         @self.app.get("/api/config")
@@ -394,6 +412,7 @@ class DashboardApp:
         ws.onopen = () => {
             document.getElementById('connection-status').textContent = 'Connected';
             fetchMetrics();
+            fetchHistory();
         };
         
         ws.onclose = () => {
@@ -418,6 +437,19 @@ class DashboardApp:
                 updateMetrics(data);
             } catch (e) {
                 console.error('Failed to fetch metrics:', e);
+            }
+        }
+
+        async function fetchHistory() {
+            try {
+                const response = await fetch('/api/history');
+                const data = await response.json();
+                if (data.items && data.items.length > 0) {
+                    activities.push(...data.items);
+                    renderActivities();
+                }
+            } catch (e) {
+                console.error('Failed to fetch history:', e);
             }
         }
         

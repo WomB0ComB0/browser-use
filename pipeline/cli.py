@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from pipeline.config import PipelineConfig
+from pipeline.extractors import get_extractor_for_file
 from pipeline.processor import PipelineProcessor
 
 # Load environment variables
@@ -34,6 +35,7 @@ def get_config(config_path: str | None = None) -> PipelineConfig:
 def start(
     config: str | None = typer.Option(None, "--config", "-c", help=_CONFIG_HELP),
     no_existing: bool = typer.Option(False, "--no-existing", help="Don't process existing files"),
+    watch: bool = typer.Option(True, "--watch", help="Watch for changes (always enabled for start)"),
 ):
     """Start the pipeline and watch for new files."""
     cfg = get_config(config)
@@ -68,6 +70,7 @@ def start(
 def process(
     file: Path = typer.Argument(..., help="File to process"),
     config: str | None = typer.Option(None, "--config", "-c", help=_CONFIG_HELP),
+    workflow: str | None = typer.Option(None, "--workflow", "-w", help="Workflow to run"),
 ):
     """Process a single file."""
     if not file.exists():
@@ -79,7 +82,7 @@ def process(
     
     async def run() -> bool:
         processor.initialize()
-        success = await processor.process_file(file)
+        success = await processor.process_file(file, workflow_name=workflow)
         return success
     
     success = asyncio.run(run())
@@ -183,6 +186,65 @@ def dashboard(
 
     dashboard_app = DashboardApp(cfg)
     dashboard_app.run(host=host, port=port)
+@app.command()
+def browser_apply(
+    file: Path = typer.Argument(..., help="File to derive info from (e.g. pitch deck)"),
+    url: str = typer.Argument(..., help="URL of the form to fill"),
+    config: str | None = typer.Option(None, "--config", "-c", help=_CONFIG_HELP),
+):
+    """Automatically derive info from a file and fill out a web form."""
+    if not file.exists():
+        console.print(f"[red]Error: File not found: {file}[/red]")
+        raise typer.Exit(1)
+    
+    cfg = get_config(config)
+    processor = PipelineProcessor(cfg)
+    
+    async def run():
+        processor.initialize()
+        console.print(f"[yellow]1. Extracting data from {file.name}...[/yellow]")
+        
+        # Run startup application workflow
+        extractor = get_extractor_for_file(file)
+        content = extractor.extract(file)
+        
+        if not processor.orchestrator:
+            console.print("[red]Error: Orchestrator not initialized[/red]")
+            return False
+            
+        wf = processor.orchestrator.create_startup_application_workflow()
+        result = await processor.orchestrator.execute_workflow(wf, content)
+        
+        if not result.success:
+            console.print("[red]Error: Workflow failed to extract data[/red]")
+            return False
+            
+        # Extract JSON data
+        data = processor.orchestrator.extract_json_from_output(result.final_output)
+        if not data:
+            console.print("[red]Error: Could not extract structured form data from AI output[/red]")
+            console.print(f"Final output was: {result.final_output[:200]}...")
+            return False
+            
+        console.print(f"[green]✓ Data extracted for startup: {data.get('startup_name', 'Unknown')}[/green]")
+        console.print(f"[yellow]2. Starting browser agent to fill form at {url}...[/yellow]")
+        
+        # Initialize browser executor
+        from pipeline.utils.browser_executor import BrowserExecutor
+        executor = BrowserExecutor(cfg)
+        
+        try:
+            exec_result = await executor.fill_form(url, data)
+            console.print("[bold green]✓ Browser agent finished![/bold green]")
+            console.print(f"Result: {exec_result}")
+            return True
+        except Exception as e:
+            console.print(f"[red]Error during browser automation: {e}[/red]")
+            return False
+
+    success = asyncio.run(run())
+    if not success:
+        raise typer.Exit(1)
 
 
 def main() -> None:

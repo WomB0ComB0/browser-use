@@ -1,0 +1,17 @@
+directories:
+  data: "data"
+  output: "output"
+  logs: "logs"
+
+processing:
+  supported_extensions: [".txt", ".md", ".json", ".csv", ".pdf", ".xlsx"]
+  concurrent_workers: 4
+
+generator:
+  provider: "gemini" # or "ollama"
+  model: "auto"
+  temperature: 0.7
+
+watcher:
+  recursive: true
+  ignore_patterns: ["*.tmp", ".*"]

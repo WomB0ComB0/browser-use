@@ -4,6 +4,8 @@ import asyncio
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import aiofiles
+
 from pipeline.config import PipelineConfig
 from pipeline.extractors import get_extractor_for_file
 from pipeline.generators import BaseGenerator, get_generator
@@ -14,6 +16,8 @@ from pipeline.watcher import FileWatcher
 
 if TYPE_CHECKING:
     from logging import Logger
+
+    from pipeline.orchestrator import AgentOrchestrator
 
 
 class PipelineProcessor:
@@ -26,6 +30,7 @@ class PipelineProcessor:
         self.generator: BaseGenerator | None = None
         self.memory: PineconeMemory | None = None
         self.watcher: FileWatcher | None = None
+        self.orchestrator: AgentOrchestrator | None = None
         self._processing_queue: asyncio.Queue[Path] = asyncio.Queue()
         self._shutdown: bool = False
         self._workers: list[asyncio.Task[None]] = []
@@ -47,6 +52,10 @@ class PipelineProcessor:
         # Initialize generator using factory
         self.generator = get_generator(self.config)
         
+        # Initialize orchestrator
+        from pipeline.orchestrator import AgentOrchestrator
+        self.orchestrator = AgentOrchestrator(self.config)
+        
         # Initialize memory
         self.memory = PineconeMemory(self.config)
         if self.memory.enabled:
@@ -55,16 +64,19 @@ class PipelineProcessor:
         
         self.logger.info("Pipeline initialized")
     
-    async def process_file(self, file_path: Path) -> bool:
+    async def process_file(self, file_path: Path, workflow_name: str | None = None) -> bool:
         """Process a single file through the pipeline.
         
         Args:
             file_path: Path to the file to process.
+            workflow_name: Optional name of special workflow to run.
             
         Returns:
             True if processing succeeded, False otherwise.
         """
         self.logger.info(f"Processing: {file_path}")
+        if workflow_name:
+            self.logger.info(f"Using workflow: {workflow_name}")
         
         try:
             # Get appropriate extractor
@@ -82,34 +94,28 @@ class PipelineProcessor:
             content = extractor.extract(file_path)
             self.logger.debug(f"Extracted: {content.file_type}, {len(content.content)} chars")
             
-            # Generate instructions
-            if self.generator is None:
-                raise RuntimeError("Generator not initialized")
-            
-            instructions = await self.generator.generate(content)
+            # Run workflow or generation
+            output_content, model_used = await self._run_workflow(content, workflow_name)
             
             # Save output
-            output_name = f"{file_path.stem}_instructions.md"
-            output_path = self.config.get_output_dir() / output_name
-            instructions.save(output_path)
-            
+            output_path = await self._save_execution_output(file_path, workflow_name, output_content)
             self.logger.info(f"Generated: {output_path}")
 
             # Store in memory
-            if getattr(self, "memory", None) and self.memory.enabled:
-                self.logger.info(f"Storing in memory: {file_path.name}")
-                self.memory.upsert(
-                    content=instructions.instructions,
-                    source_file=file_path.name,
-                    metadata={
-                        "type": "instruction_generation",
-                        "file_type": content.file_type,
-                        "output_path": str(output_path),
-                        "model": instructions.model_used
-                    }
-                )
+            self._store_execution_memory(
+                file_path=file_path, 
+                workflow_name=workflow_name,
+                content_type=content.file_type,
+                output_content=output_content,
+                output_path=output_path,
+                model_used=model_used
+            )
 
             self.metrics.end_processing(success=True)
+            
+            # Save metrics to disk so separate dashboard process can read them
+            metrics_path = self.config.get_logs_dir() / "metrics.json"
+            self.metrics.save(metrics_path)
             
             return True
             
@@ -118,6 +124,65 @@ class PipelineProcessor:
             self.logger.error(f"Error processing {file_path}: {e}\n{traceback.format_exc()}")
             self.metrics.end_processing(success=False, error=str(e))
             return False
+
+    async def _run_workflow(self, content, workflow_name: str | None) -> tuple[str, str]:
+        """Run a workflow or standard generation."""
+        if workflow_name and self.orchestrator:
+            if workflow_name == "startup_application":
+                wf = self.orchestrator.create_startup_application_workflow()
+            elif workflow_name == "code_review":
+                wf = self.orchestrator.create_code_review_workflow()
+            else:
+                # Try to load from YAML if possible (could be extended)
+                raise ValueError(f"Unknown workflow: {workflow_name}")
+            
+            result = await self.orchestrator.execute_workflow(wf, content)
+            return result.final_output, "multi-agent-workflow"
+        
+        # Standard generation
+        if self.generator is None:
+            raise RuntimeError("Generator not initialized")
+        
+        instr_result = await self.generator.generate(content)
+        return instr_result.instructions, instr_result.model_used
+
+    async def _save_execution_output(self, file_path: Path, workflow_name: str | None, content: str) -> Path:
+        """Save execution output to a markdown file."""
+        output_name = f"{file_path.stem}_{workflow_name if workflow_name else 'instructions'}.md"
+        if not output_name.endswith(".md"):
+            output_name += ".md"
+        output_path = self.config.get_output_dir() / output_name
+        
+        # Manual write since GeneratedInstructions isn't returned by orchestrator yet
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        async with aiofiles.open(output_path, mode="w", encoding="utf-8") as f:
+            await f.write(f"# Processed: {file_path.name}\n\n{content}")
+            
+        return output_path
+
+    def _store_execution_memory(
+        self, 
+        file_path: Path, 
+        workflow_name: str | None, 
+        content_type: str, 
+        output_content: str, 
+        output_path: Path, 
+        model_used: str
+    ) -> None:
+        """Store execution results in Pinecone memory if enabled."""
+        if getattr(self, "memory", None) and self.memory.enabled:
+            self.logger.info(f"Storing in memory: {file_path.name}")
+            self.memory.upsert(
+                content=output_content,
+                source_file=file_path.name,
+                metadata={
+                    "type": "workflow" if workflow_name else "instruction_generation",
+                    "workflow_name": workflow_name,
+                    "file_type": content_type,
+                    "output_path": str(output_path),
+                    "model": model_used
+                }
+            )
     
     async def _worker(self, worker_id: int) -> None:
         """Worker coroutine that processes files from the queue."""
