@@ -10,6 +10,7 @@ from pipeline.config import PipelineConfig
 from pipeline.extractors.base import ExtractedContent
 from pipeline.generators import get_generator
 from pipeline.generators.base import BaseGenerator, GeneratedInstructions
+from pipeline.memory.pinecone_service import PineconeMemory
 from pipeline.utils.logging import get_logger
 from pipeline.utils.models import get_model_for_role
 
@@ -78,6 +79,8 @@ class WorkflowResult:
     errors: list[str] = field(default_factory=list)
 
 
+
+
 class AgentOrchestrator:
     """Orchestrates multiple AI agents for complex workflows."""
 
@@ -85,6 +88,7 @@ class AgentOrchestrator:
         self.config = config
         self.logger: Logger = get_logger(__name__)
         self._generators: dict[AgentRole, BaseGenerator] = {}
+        self.memory = PineconeMemory(config)
 
     def _get_generator_for_role(self, role: AgentRole) -> BaseGenerator:
         """Get or create a generator configured for a specific role."""
@@ -143,6 +147,14 @@ class AgentOrchestrator:
         final_output = ""
         if agent_outputs:
             final_output = list(agent_outputs.values())[-1]
+            
+            # Store in memory
+            if self.memory.enabled:
+                self.memory.upsert(
+                    content=final_output,
+                    source_file=content.file_name,
+                    metadata={"workflow": workflow.get("name"), "type": "workflow_result"}
+                )
 
         return WorkflowResult(
             workflow_name=workflow.get("name", "unnamed"),

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import TypedDict
 
 from pipeline.extractors.base import BaseExtractor, ExtractedContent
+from pipeline.extractors.ocr_extractor import OCRExtractor
 
 try:
     from pypdf import PdfReader
@@ -54,6 +55,18 @@ class PdfExtractor(BaseExtractor):
                     text_content.append(page_text)
 
             content = "\n\n".join(text_content)
+
+            # Check if likely scanned (very little text)
+            if len(content.strip()) < 50:  # Heuristic: < 50 chars total
+                # Try OCR
+                try:
+                    ocr_extractor = OCRExtractor()
+                    ocr_result = ocr_extractor.extract(file_path)
+                    if ocr_result and len(ocr_result.content) > len(content):
+                        return ocr_result
+                except Exception:
+                    # Log but fall back to original empty content
+                    pass
 
             # Extract metadata
             pdf_metadata = reader.metadata

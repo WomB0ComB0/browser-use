@@ -50,7 +50,9 @@ class DebouncedHandler(FileSystemEventHandler):
         
         def run_callback() -> None:
             del self.pending[path]
-            self.callback(Path(path))
+            # Fix: Race condition check - ensure file still exists
+            if Path(path).exists():
+                self.callback(Path(path))
         
         handle = self.loop.call_later(
             self.config.watcher.debounce_seconds,

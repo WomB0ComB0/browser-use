@@ -61,6 +61,13 @@ class WatcherConfig(BaseModel):
     ignore_patterns: list[str] = Field(default_factory=lambda: ["*.tmp", "*.swp", ".*"])
 
 
+class MemoryConfig(BaseModel):
+    """Memory configuration."""
+    pinecone_api_key: str | None = None
+    pinecone_environment: str | None = None
+    pinecone_index_name: str | None = None
+
+
 class PipelineConfig(BaseModel):
     """Main pipeline configuration."""
     directories: DirectoriesConfig = Field(default_factory=DirectoriesConfig)
@@ -68,6 +75,7 @@ class PipelineConfig(BaseModel):
     generator: GeneratorConfig = Field(default_factory=GeneratorConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     watcher: WatcherConfig = Field(default_factory=WatcherConfig)
+    memory: MemoryConfig = Field(default_factory=MemoryConfig)
     
     _base_path: Path = Path(".")
     
