@@ -1,9 +1,8 @@
-"""Command-line interface for the pipeline."""
+from __future__ import annotations
 
 import asyncio
 import signal
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -18,9 +17,10 @@ app = typer.Typer(
     add_completion=False,
 )
 console = Console()
+_CONFIG_HELP = "Path to config file"
 
 
-def get_config(config_path: Optional[str] = None) -> PipelineConfig:
+def get_config(config_path: str | None = None) -> PipelineConfig:
     """Load configuration."""
     base_path = Path(__file__).parent.parent
     return PipelineConfig.load(config_path, base_path)
@@ -28,7 +28,7 @@ def get_config(config_path: Optional[str] = None) -> PipelineConfig:
 
 @app.command()
 def start(
-    config: Optional[str] = typer.Option(None, "--config", "-c", help="Path to config file"),
+    config: str | None = typer.Option(None, "--config", "-c", help=_CONFIG_HELP),
     no_existing: bool = typer.Option(False, "--no-existing", help="Don't process existing files"),
 ):
     """Start the pipeline and watch for new files."""
@@ -63,7 +63,7 @@ def start(
 @app.command()
 def process(
     file: Path = typer.Argument(..., help="File to process"),
-    config: Optional[str] = typer.Option(None, "--config", "-c", help="Path to config file"),
+    config: str | None = typer.Option(None, "--config", "-c", help=_CONFIG_HELP),
 ):
     """Process a single file."""
     if not file.exists():
@@ -73,7 +73,7 @@ def process(
     cfg = get_config(config)
     processor = PipelineProcessor(cfg)
     
-    async def run():
+    async def run() -> bool:
         await processor.initialize()
         success = await processor.process_file(file)
         return success
@@ -91,7 +91,7 @@ def process(
 
 @app.command("config")
 def show_config(
-    config: Optional[str] = typer.Option(None, "--config", "-c", help="Path to config file"),
+    config: str | None = typer.Option(None, "--config", "-c", help=_CONFIG_HELP),
 ):
     """Display current configuration."""
     cfg = get_config(config)
@@ -121,7 +121,7 @@ def show_config(
 
 @app.command()
 def status(
-    config: Optional[str] = typer.Option(None, "--config", "-c", help="Path to config file"),
+    config: str | None = typer.Option(None, "--config", "-c", help=_CONFIG_HELP),
 ):
     """Show pipeline status and metrics."""
     cfg = get_config(config)
@@ -154,7 +154,7 @@ def status(
     ))
 
 
-def main():
+def main() -> None:
     """Main entry point."""
     app()
 

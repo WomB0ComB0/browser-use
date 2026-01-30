@@ -1,4 +1,5 @@
 """Enterprise Data Pipeline Package."""
+from __future__ import annotations
 
 from pipeline.config import PipelineConfig
 from pipeline.processor import PipelineProcessor

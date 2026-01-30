@@ -1,8 +1,7 @@
-"""Configuration management with Pydantic validation."""
+from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Optional
 
 import yaml
 from pydantic import BaseModel, Field
@@ -71,7 +70,7 @@ class PipelineConfig(BaseModel):
     _base_path: Path = Path(".")
     
     @classmethod
-    def load(cls, config_path: Optional[str] = None, base_path: Optional[Path] = None) -> "PipelineConfig":
+    def load(cls, config_path: str | None = None, base_path: Path | None = None) -> PipelineConfig:
         """Load configuration from YAML file with environment variable overrides."""
         if base_path is None:
             base_path = Path(".")

@@ -1,8 +1,8 @@
-"""Main pipeline processor."""
+from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING
 
 from pipeline.config import PipelineConfig
 from pipeline.extractors import get_extractor_for_file
@@ -11,21 +11,24 @@ from pipeline.utils.logging import get_logger, setup_logging
 from pipeline.utils.metrics import PipelineMetrics
 from pipeline.watcher import FileWatcher
 
+if TYPE_CHECKING:
+    from logging import Logger
+
 
 class PipelineProcessor:
     """Main pipeline processor that coordinates extraction and generation."""
     
-    def __init__(self, config: PipelineConfig):
+    def __init__(self, config: PipelineConfig) -> None:
         self.config = config
-        self.logger = get_logger(__name__)
+        self.logger: Logger = get_logger(__name__)
         self.metrics = PipelineMetrics()
-        self.generator: Optional[GeminiGenerator] = None
-        self.watcher: Optional[FileWatcher] = None
+        self.generator: GeminiGenerator | None = None
+        self.watcher: FileWatcher | None = None
         self._processing_queue: asyncio.Queue[Path] = asyncio.Queue()
         self._shutdown = False
-        self._workers: list[asyncio.Task] = []
+        self._workers: list[asyncio.Task[None]] = []
     
-    async def initialize(self) -> None:
+    def initialize(self) -> None:
         """Initialize the pipeline components."""
         # Ensure directories exist
         self.config.ensure_directories()
@@ -36,6 +39,8 @@ class PipelineProcessor:
             format_type=self.config.logging.format,
             log_dir=self.config.get_logs_dir(),
         )
+        
+        self.logger.info("Initializing pipeline components")
         
         # Initialize generator
         self.generator = GeminiGenerator(self.config)
@@ -109,6 +114,9 @@ class PipelineProcessor:
                 await self.process_file(file_path)
                 self._processing_queue.task_done()
                 
+            except asyncio.CancelledError:
+                self.logger.info(f"Worker {worker_id} cancelled")
+                raise
             except Exception as e:
                 self.logger.error(f"Worker {worker_id} error: {e}")
         
@@ -130,7 +138,7 @@ class PipelineProcessor:
         Args:
             process_existing: Whether to process existing files in data folder.
         """
-        await self.initialize()
+        self.initialize()
         
         self.logger.info("Starting pipeline...")
         
@@ -188,6 +196,7 @@ class PipelineProcessor:
             while not self._shutdown:
                 await asyncio.sleep(1)
         except asyncio.CancelledError:
-            pass
+            self.logger.info("Pipeline run cancelled")
+            raise
         finally:
             await self.stop()

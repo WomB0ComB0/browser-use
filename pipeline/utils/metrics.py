@@ -1,11 +1,24 @@
-"""Pipeline metrics collection."""
+from __future__ import annotations
 
 import json
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, TypedDict
+
+
+class MetricsSummary(TypedDict, total=False):
+    """Summary of pipeline metrics."""
+    files_processed: int
+    files_succeeded: int
+    files_failed: int
+    success_rate_percent: float
+    total_bytes_processed: int
+    average_processing_time_seconds: float
+    uptime_seconds: float
+    started_at: str
+    records: list[dict[str, Any]]
 
 
 @dataclass
@@ -15,12 +28,12 @@ class ProcessingRecord:
     file_type: str
     file_size: int
     start_time: float
-    end_time: Optional[float] = None
+    end_time: float | None = None
     success: bool = False
-    error: Optional[str] = None
+    error: str | None = None
     
     @property
-    def duration_seconds(self) -> Optional[float]:
+    def duration_seconds(self) -> float | None:
         if self.end_time is None:
             return None
         return self.end_time - self.start_time
@@ -43,7 +56,7 @@ class PipelineMetrics:
     records: list[ProcessingRecord] = field(default_factory=list)
     
     # Current processing
-    _current: Optional[ProcessingRecord] = field(default=None, repr=False)
+    _current: ProcessingRecord | None = field(default=None, repr=False)
     
     def start_processing(self, file_path: Path, file_type: str, file_size: int) -> None:
         """Mark the start of file processing."""
@@ -54,7 +67,7 @@ class PipelineMetrics:
             start_time=time.time(),
         )
     
-    def end_processing(self, success: bool = True, error: Optional[str] = None) -> None:
+    def end_processing(self, success: bool = True, error: str | None = None) -> None:
         """Mark the end of file processing."""
         if self._current is None:
             return
@@ -94,7 +107,7 @@ class PipelineMetrics:
         """Get pipeline uptime in seconds."""
         return (datetime.now() - self.started_at).total_seconds()
     
-    def get_summary(self) -> dict:
+    def get_summary(self) -> MetricsSummary:
         """Get a summary of all metrics."""
         return {
             "files_processed": self.files_processed,

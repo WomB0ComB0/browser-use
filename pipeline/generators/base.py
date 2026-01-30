@@ -1,10 +1,10 @@
-"""Base generator interface."""
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 from pipeline.extractors.base import ExtractedContent
 
@@ -23,11 +23,11 @@ class GeneratedInstructions:
     
     # Generation metadata
     generated_at: datetime = field(default_factory=datetime.now)
-    model_used: Optional[str] = None
-    tokens_used: Optional[int] = None
+    model_used: str | None = None
+    tokens_used: int | None = None
     
     # Additional metadata
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     
     def to_markdown(self) -> str:
         """Convert to markdown format."""

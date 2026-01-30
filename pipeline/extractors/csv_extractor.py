@@ -1,10 +1,28 @@
-"""CSV file extractor."""
+from __future__ import annotations
 
 import csv
 from io import StringIO
 from pathlib import Path
+from typing import TypedDict
 
-from pipeline.extractors.base import BaseExtractor, ExtractedContent
+from pipeline.extractors.base import BaseExtractor, ExtractedContent, FileMetadata
+
+
+class ColumnInfo(TypedDict):
+    name: str
+    type: str
+    non_null_count: int
+    null_count: int
+    unique_count: int
+    sample_values: list[str]
+
+
+class CsvStructure(TypedDict):
+    headers: list[str]
+    row_count: int
+    column_count: int
+    columns: list[ColumnInfo]
+    preview: str
 
 
 class CsvExtractor(BaseExtractor):
@@ -62,20 +80,20 @@ class CsvExtractor(BaseExtractor):
             file_type="CSV" if delimiter == "," else "TSV",
             file_size_bytes=metadata["file_size_bytes"],
             modified_time=metadata["modified_time"],
-            structure={
-                "headers": headers,
-                "row_count": len(data_rows),
-                "column_count": len(headers),
-                "columns": column_info,
-                "preview": preview,
-            },
+            structure=CsvStructure(
+                headers=headers,
+                row_count=len(data_rows),
+                column_count=len(headers),
+                columns=column_info,
+                preview=preview,
+            ),
             metadata={
                 "delimiter": delimiter,
                 "has_headers": True,
             },
         )
     
-    def _create_empty_result(self, file_path: Path, metadata: dict, content: str) -> ExtractedContent:
+    def _create_empty_result(self, file_path: Path, metadata: FileMetadata, content: str) -> ExtractedContent:
         """Create result for empty CSV."""
         return ExtractedContent(
             content=content,
@@ -84,13 +102,19 @@ class CsvExtractor(BaseExtractor):
             file_type="CSV",
             file_size_bytes=metadata["file_size_bytes"],
             modified_time=metadata["modified_time"],
-            structure={"headers": [], "row_count": 0, "column_count": 0},
+            structure=CsvStructure(
+                headers=[],
+                row_count=0,
+                column_count=0,
+                columns=[],
+                preview="",
+            ),
             metadata={},
         )
     
-    def _analyze_columns(self, headers: list, data_rows: list) -> list[dict]:
+    def _analyze_columns(self, headers: list[str], data_rows: list[list[str]]) -> list[ColumnInfo]:
         """Analyze column types and statistics."""
-        columns = []
+        columns: list[ColumnInfo] = []
         
         for i, header in enumerate(headers):
             col_values = [row[i] for row in data_rows if i < len(row)]
@@ -142,14 +166,14 @@ class CsvExtractor(BaseExtractor):
         
         return "string"
     
-    def _create_csv_summary(self, headers: list, data_rows: list) -> str:
+    def _create_csv_summary(self, headers: list[str], data_rows: list[list[str]]) -> str:
         """Create a summary for CSV data."""
         col_str = ", ".join(headers[:5])
         if len(headers) > 5:
             col_str += f", ... ({len(headers)} total columns)"
         return f"CSV with {len(data_rows)} rows. Columns: {col_str}"
     
-    def _create_preview(self, headers: list, sample_rows: list) -> str:
+    def _create_preview(self, headers: list[str], sample_rows: list[list[str]]) -> str:
         """Create a text preview of the CSV."""
         lines = [",".join(headers)]
         for row in sample_rows[:5]:

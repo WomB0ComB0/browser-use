@@ -1,22 +1,29 @@
-"""Gemini-based instruction generator."""
+from __future__ import annotations
 
 import os
 from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from pipeline.config import PipelineConfig
 from pipeline.extractors.base import ExtractedContent
+from pipeline.extractors.csv_extractor import CsvStructure
+from pipeline.extractors.json_extractor import JsonStructure
+from pipeline.extractors.text import MarkdownStructure
 from pipeline.generators.base import BaseGenerator, GeneratedInstructions
 from pipeline.utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from logging import Logger
 
 
 class GeminiGenerator(BaseGenerator):
     """Generate instructions using Google Gemini."""
     
-    def __init__(self, config: PipelineConfig):
+    def __init__(self, config: PipelineConfig) -> None:
         self.config = config
-        self.logger = get_logger(__name__)
+        self.logger: Logger = get_logger(__name__)
         
         # Get API key
         api_key = os.environ.get("GEMINI_API_KEY")
@@ -45,10 +52,10 @@ class GeminiGenerator(BaseGenerator):
         # Generate response
         try:
             response = await self.llm.ainvoke(prompt)
-            instructions = response.content
+            instructions: str = response.content
             
             # Extract token usage if available
-            tokens_used = None
+            tokens_used: int | None = None
             if hasattr(response, "usage_metadata") and response.usage_metadata:
                 tokens_used = response.usage_metadata.get("total_tokens")
             
@@ -111,7 +118,7 @@ class GeminiGenerator(BaseGenerator):
         
         return f"{prompt}\n\n{context}"
     
-    def _format_structure(self, structure: dict) -> str:
+    def _format_structure(self, structure: MarkdownStructure | CsvStructure | JsonStructure | dict[str, Any]) -> str:
         """Format structure information for the prompt."""
         if not structure:
             return ""

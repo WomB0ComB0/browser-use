@@ -1,4 +1,7 @@
 """Extractor package for different file types."""
+from __future__ import annotations
+
+from pathlib import Path
 
 from pipeline.extractors.base import BaseExtractor, ExtractedContent
 from pipeline.extractors.csv_extractor import CsvExtractor
@@ -14,13 +17,11 @@ __all__ = [
 ]
 
 
-def get_extractor_for_file(file_path) -> BaseExtractor:
+def get_extractor_for_file(file_path: str | Path) -> BaseExtractor:
     """Get the appropriate extractor for a file based on its extension."""
-    from pathlib import Path
-    
     suffix = Path(file_path).suffix.lower()
     
-    extractors = {
+    extractors: dict[str, type[BaseExtractor]] = {
         ".txt": TextExtractor,
         ".md": TextExtractor,
         ".rst": TextExtractor,

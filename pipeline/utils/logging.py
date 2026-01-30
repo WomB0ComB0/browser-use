@@ -1,11 +1,10 @@
-"""Structured logging for the pipeline."""
+from __future__ import annotations
 
 import json
 import logging
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 # Global logger cache
 _loggers: dict[str, logging.Logger] = {}
@@ -17,7 +16,7 @@ class JsonFormatter(logging.Formatter):
     
     def format(self, record: logging.LogRecord) -> str:
         log_data = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -68,7 +67,7 @@ class ColoredFormatter(logging.Formatter):
 def setup_logging(
     level: str = "INFO",
     format_type: str = "text",
-    log_dir: Optional[Path] = None,
+    log_dir: Path | None = None,
 ) -> None:
     """Setup logging configuration.
     

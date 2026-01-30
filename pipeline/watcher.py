@@ -1,15 +1,18 @@
-"""File system watcher for monitoring data directories."""
+from __future__ import annotations
 
 import asyncio
 import fnmatch
 from pathlib import Path
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 from pipeline.config import PipelineConfig
 from pipeline.utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from logging import Logger
 
 
 class DebouncedHandler(FileSystemEventHandler):
@@ -20,12 +23,12 @@ class DebouncedHandler(FileSystemEventHandler):
         callback: Callable[[Path], None],
         config: PipelineConfig,
         loop: asyncio.AbstractEventLoop,
-    ):
+    ) -> None:
         self.callback = callback
         self.config = config
         self.loop = loop
         self.pending: dict[str, asyncio.TimerHandle] = {}
-        self.logger = get_logger(__name__)
+        self.logger: Logger = get_logger(__name__)
     
     def _should_ignore(self, path: str) -> bool:
         """Check if path matches any ignore patterns."""
@@ -45,7 +48,7 @@ class DebouncedHandler(FileSystemEventHandler):
         if path in self.pending:
             self.pending[path].cancel()
         
-        def run_callback():
+        def run_callback() -> None:
             del self.pending[path]
             self.callback(Path(path))
         
@@ -87,13 +90,13 @@ class FileWatcher:
         self,
         config: PipelineConfig,
         callback: Callable[[Path], None],
-        loop: Optional[asyncio.AbstractEventLoop] = None,
-    ):
+        loop: asyncio.AbstractEventLoop | None = None,
+    ) -> None:
         self.config = config
         self.callback = callback
         self.loop = loop or asyncio.get_event_loop()
-        self.observer: Optional[Observer] = None
-        self.logger = get_logger(__name__)
+        self.observer: Observer | None = None
+        self.logger: Logger = get_logger(__name__)
     
     def start(self) -> None:
         """Start watching the data directory."""

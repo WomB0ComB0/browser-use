@@ -1,14 +1,24 @@
-"""Text file extractor for .txt, .md, .rst files."""
+from __future__ import annotations
 
 from pathlib import Path
+from typing import TypedDict
 
 from pipeline.extractors.base import BaseExtractor, ExtractedContent
+
+
+class MarkdownStructure(TypedDict):
+    headers: list[dict[str, int | str]]
+    code_blocks: int
+    header_count: int
 
 
 class TextExtractor(BaseExtractor):
     """Extractor for plain text and markdown files."""
     
-    SUPPORTED_EXTENSIONS = {".txt", ".md", ".rst", ".text", ".markdown"}
+    _MD_EXTS = {".md", ".markdown"}
+    _TXT_EXTS = {".txt", ".text"}
+    SUPPORTED_EXTENSIONS = _MD_EXTS | _TXT_EXTS | {".rst"}
+    _MARKDOWN_EXTENSIONS = _MD_EXTS
     
     def supports(self, file_path: Path) -> bool:
         """Check if this extractor supports the given file."""
@@ -24,21 +34,21 @@ class TextExtractor(BaseExtractor):
         
         # Determine file type description
         suffix = file_path.suffix.lower()
-        file_type_map = {
-            ".txt": "Plain Text",
-            ".md": "Markdown",
-            ".markdown": "Markdown",
-            ".rst": "reStructuredText",
-            ".text": "Plain Text",
-        }
-        file_type = file_type_map.get(suffix, "Text")
+        if suffix in self._MD_EXTS:
+            file_type = "Markdown"
+        elif suffix in self._TXT_EXTS:
+            file_type = "Plain Text"
+        elif suffix == ".rst":
+            file_type = "reStructuredText"
+        else:
+            file_type = "Text"
         
         # Create summary
         summary = self._create_summary(content)
         
         # Extract structure for markdown
-        structure = None
-        if suffix in {".md", ".markdown"}:
+        structure: MarkdownStructure | None = None
+        if suffix in self._MARKDOWN_EXTENSIONS:
             structure = self._extract_markdown_structure(content)
         
         return ExtractedContent(
@@ -64,18 +74,17 @@ class TextExtractor(BaseExtractor):
             try:
                 with open(file_path, "r", encoding=encoding) as f:
                     return f.read()
-            except (UnicodeDecodeError, UnicodeError):
+            except UnicodeDecodeError:
                 continue
         
         # Fallback: read as binary and decode with errors ignored
-        with open(file_path, "rb") as f:
-            return f.read().decode("utf-8", errors="ignore")
+        with open(file_path, "rb") as bf:
+            return bf.read().decode("utf-8", errors="ignore")
     
-    def _extract_markdown_structure(self, content: str) -> dict:
+    def _extract_markdown_structure(self, content: str) -> MarkdownStructure:
         """Extract structure from markdown content."""
-        headers = []
+        headers: list[dict[str, int | str]] = []
         code_blocks = 0
-        links = []
         
         in_code_block = False
         for line in content.split("\n"):

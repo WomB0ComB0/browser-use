@@ -1,10 +1,17 @@
-"""Base extractor interface and data models."""
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, TypedDict
+
+
+class FileMetadata(TypedDict):
+    """Common file metadata."""
+    file_size_bytes: int
+    modified_time: datetime
+    created_time: datetime
 
 
 @dataclass
@@ -22,7 +29,7 @@ class ExtractedContent:
     modified_time: datetime
     
     # Extracted structure (optional)
-    structure: Optional[dict[str, Any]] = None
+    structure: dict[str, Any] | None = None
     
     # Additional metadata
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -65,7 +72,7 @@ class BaseExtractor(ABC):
         """
         pass
     
-    def _get_file_metadata(self, file_path: Path) -> dict[str, Any]:
+    def _get_file_metadata(self, file_path: Path) -> FileMetadata:
         """Get common file metadata."""
         stat = file_path.stat()
         return {

@@ -1,10 +1,23 @@
 """JSON file extractor."""
+from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from pipeline.extractors.base import BaseExtractor, ExtractedContent
+
+
+class JsonStructure(TypedDict, total=False):
+    type: str
+    truncated: bool
+    keys: list[str]
+    key_count: int
+    sample_values: dict[str, JsonStructure]
+    length: int
+    item_types: list[str]
+    sample: JsonStructure | None
+    value_preview: str | None
 
 
 class JsonExtractor(BaseExtractor):
@@ -21,9 +34,21 @@ class JsonExtractor(BaseExtractor):
         file_path = Path(file_path)
         metadata = self._get_file_metadata(file_path)
         
-        with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read()
+        # Attempt to read with common encodings
+        content = None
+        for encoding in ["utf-8", "latin-1"]:  # Add more encodings if needed
+            try:
+                with open(file_path, "r", encoding=encoding) as f:
+                    content = f.read()
+                break  # Successfully read, exit loop
+            except UnicodeDecodeError:
+                continue  # Try next encoding
         
+        if content is None:
+            # If all attempts fail, read as binary and decode with replacement
+            with open(file_path, "rb") as f:
+                content = f.read().decode("utf-8", errors="replace")
+
         # Parse JSON
         try:
             data = json.loads(content)
@@ -58,7 +83,7 @@ class JsonExtractor(BaseExtractor):
             },
         )
     
-    def _analyze_structure(self, data: Any, depth: int = 0, max_depth: int = 3) -> dict:
+    def _analyze_structure(self, data: Any, depth: int = 0, max_depth: int = 3) -> JsonStructure:
         """Analyze the structure of JSON data."""
         if depth >= max_depth:
             return {"type": type(data).__name__, "truncated": True}
@@ -77,7 +102,7 @@ class JsonExtractor(BaseExtractor):
             return {
                 "type": "array",
                 "length": len(data),
-                "item_types": list(set(type(item).__name__ for item in data[:10])),
+                "item_types": list({type(item).__name__ for item in data[:10]}),
                 "sample": self._analyze_structure(data[0], depth + 1, max_depth) if data else None,
             }
         else:
@@ -101,3 +126,4 @@ class JsonExtractor(BaseExtractor):
             return f"JSON array with {len(data)} {item_type} items"
         else:
             return f"JSON {type(data).__name__}: {str(data)[:200]}"
+
