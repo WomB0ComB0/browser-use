@@ -13,6 +13,7 @@ from pipeline.extractors.json_extractor import JsonStructure
 from pipeline.extractors.text import MarkdownStructure
 from pipeline.generators.base import BaseGenerator, GeneratedInstructions
 from pipeline.utils.logging import get_logger
+from pipeline.utils.models import get_model_for_role
 
 if TYPE_CHECKING:
     from logging import Logger
@@ -30,17 +31,24 @@ class GeminiGenerator(BaseGenerator):
         if not api_key:
             raise ValueError("GEMINI_API_KEY environment variable not set")
         
+        # Resolve auto model
+        model_name = config.generator.model
+        if model_name.lower() == "auto":
+            model_name = get_model_for_role("ENGINEER")
+            self.logger.info(f"Resolved 'auto' model to: {model_name}")
+            
         # Initialize the model
         self.llm = ChatGoogleGenerativeAI(
-            model=config.generator.model,
+            model=model_name,
             google_api_key=api_key,
             temperature=config.generator.temperature,
             max_tokens=config.generator.max_tokens,
         )
+        self._resolved_model_name = model_name
     
     def get_model_name(self) -> str:
         """Get the name of the model being used."""
-        return self.config.generator.model
+        return self._resolved_model_name
     
     async def generate(self, content: ExtractedContent) -> GeneratedInstructions:
         """Generate instructions from extracted content."""

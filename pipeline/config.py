@@ -25,7 +25,7 @@ class ProcessingConfig(BaseModel):
 
 class GeneratorConfig(BaseModel):
     """AI generator configuration."""
-    model: str = "gemini-2.0-flash"
+    model: str = "auto"
     temperature: float = 0.7
     max_tokens: int = 4096
     instruction_template: str = """Analyze the following data and generate clear, actionable instructions:
