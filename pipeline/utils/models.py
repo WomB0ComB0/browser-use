@@ -4,7 +4,6 @@ import json
 import os
 import re
 import subprocess
-import sys
 import time
 from typing import Dict, List
 
@@ -132,28 +131,3 @@ def get_model_for_role(role: str) -> str:
         return role_models[0]
 
     return DEFAULT_MODEL
-
-
-def main() -> None:
-    """CLI entry point for model selection."""
-    if len(sys.argv) < 2:
-        arg = "ENGINEER"
-    else:
-        arg = sys.argv[1]
-
-    # Input sanitization
-    if not re.match(r"^[a-zA-Z_]+$", arg):
-        sys.exit(1)
-
-    arg = arg.upper()
-
-    if arg == "DISCOVER":
-        if os.path.exists(CACHE_FILE):
-            os.remove(CACHE_FILE)
-        print("Discovery triggered")
-    else:
-        print(get_model_for_role(arg))
-
-
-if __name__ == "__main__":
-    main()

@@ -1,0 +1,49 @@
+# Code Review Workflow
+# Multi-agent workflow for comprehensive code analysis
+
+name: code_review
+description: >
+  A multi-step code review process using specialized agents 
+  for analysis, detailed review, and test planning.
+
+steps:
+  - name: analyze
+    role: planner
+    action: analyze
+    prompt_template: |
+      Analyze this code and identify:
+      1. Overall architecture and patterns
+      2. Key areas requiring review
+      3. Potential complexity issues
+      4. Security considerations
+    max_retries: 1
+
+  - name: review
+    role: engineer
+    action: review
+    input_from: analyze
+    prompt_template: |
+      Based on the analysis, perform a detailed code review:
+      {previous_output}
+      
+      Focus on:
+      - Code quality and readability
+      - Error handling
+      - Performance implications
+      - Best practices adherence
+    max_retries: 2
+
+  - name: test_plan
+    role: tester
+    action: plan_tests
+    input_from: review
+    prompt_template: |
+      Create a comprehensive test plan based on:
+      {previous_output}
+      
+      Include:
+      - Unit test cases
+      - Edge cases
+      - Integration test scenarios
+      - Performance test considerations
+    max_retries: 1

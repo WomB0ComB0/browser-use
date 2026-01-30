@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from pipeline.config import PipelineConfig
 from pipeline.extractors import get_extractor_for_file
-from pipeline.generators import GeminiGenerator
+from pipeline.generators import BaseGenerator, get_generator
 from pipeline.utils.logging import get_logger, setup_logging
 from pipeline.utils.metrics import PipelineMetrics
 from pipeline.watcher import FileWatcher
@@ -22,7 +22,7 @@ class PipelineProcessor:
         self.config = config
         self.logger: Logger = get_logger(__name__)
         self.metrics = PipelineMetrics()
-        self.generator: GeminiGenerator | None = None
+        self.generator: BaseGenerator | None = None
         self.watcher: FileWatcher | None = None
         self._processing_queue: asyncio.Queue[Path] = asyncio.Queue()
         self._shutdown = False
@@ -42,8 +42,8 @@ class PipelineProcessor:
         
         self.logger.info("Initializing pipeline components")
         
-        # Initialize generator
-        self.generator = GeminiGenerator(self.config)
+        # Initialize generator using factory
+        self.generator = get_generator(self.config)
         
         self.logger.info("Pipeline initialized")
     

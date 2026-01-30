@@ -25,9 +25,11 @@ class ProcessingConfig(BaseModel):
 
 class GeneratorConfig(BaseModel):
     """AI generator configuration."""
+    provider: str = "gemini"  # gemini, ollama
     model: str = "auto"
     temperature: float = 0.7
     max_tokens: int = 4096
+    ollama_host: str = "http://localhost:11434"
     instruction_template: str = """Analyze the following data and generate clear, actionable instructions:
 
 ## Data Type: {file_type}
@@ -93,6 +95,8 @@ class PipelineConfig(BaseModel):
             data.setdefault("directories", {})["output"] = os.environ["PIPELINE_OUTPUT_DIR"]
         if "PIPELINE_LOG_LEVEL" in os.environ:
             data.setdefault("logging", {})["level"] = os.environ["PIPELINE_LOG_LEVEL"]
+        if "PIPELINE_PROVIDER" in os.environ:
+            data.setdefault("generator", {})["provider"] = os.environ["PIPELINE_PROVIDER"]
         if "PIPELINE_MODEL" in os.environ:
             data.setdefault("generator", {})["model"] = os.environ["PIPELINE_MODEL"]
         

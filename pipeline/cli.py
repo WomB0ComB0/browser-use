@@ -154,6 +154,33 @@ def status(
     ))
 
 
+@app.command()
+def dashboard(
+    config: str | None = typer.Option(None, "--config", "-c", help=_CONFIG_HELP),
+    host: str = typer.Option("0.0.0.0", "--host", "-H", help="Host to bind to"),
+    port: int = typer.Option(8080, "--port", "-p", help="Port to bind to"),
+):
+    """Start the web dashboard for real-time monitoring."""
+    cfg = get_config(config)
+
+    try:
+        from pipeline.dashboard import DashboardApp
+    except ImportError:
+        console.print("[red]Dashboard requires FastAPI. Install with:[/red]")
+        console.print("  pip install fastapi uvicorn websockets")
+        raise typer.Exit(1)
+
+    console.print(Panel.fit(
+        f"[bold green]Starting Pipeline Dashboard[/bold green]\n"
+        f"URL: [cyan]http://{host}:{port}[/cyan]\n"
+        f"Press Ctrl+C to stop",
+        title="Dashboard",
+    ))
+
+    dashboard_app = DashboardApp(cfg)
+    dashboard_app.run(host=host, port=port)
+
+
 def main() -> None:
     """Main entry point."""
     app()

@@ -1,0 +1,50 @@
+# Data Analysis Workflow
+# Multi-agent workflow for comprehensive data exploration and analysis
+
+name: data_analysis
+description: >
+  A multi-step data analysis process using specialized agents
+  for exploration, detailed analysis, and executive summarization.
+
+steps:
+  - name: explore
+    role: thinker
+    action: explore
+    prompt_template: |
+      Explore this data and identify:
+      1. Data structure and schema
+      2. Key patterns and trends
+      3. Anomalies or outliers
+      4. Data quality issues
+      5. Initial hypotheses
+    max_retries: 1
+
+  - name: analyze
+    role: engineer
+    action: analyze
+    input_from: explore
+    prompt_template: |
+      Perform detailed analysis based on:
+      {previous_output}
+      
+      Provide:
+      - Statistical analysis where applicable
+      - Correlation analysis
+      - Trend identification
+      - Actionable insights
+    max_retries: 2
+
+  - name: summarize
+    role: planner
+    action: summarize
+    input_from: analyze
+    prompt_template: |
+      Create an executive summary:
+      {previous_output}
+      
+      Format as:
+      - Key findings (bullet points)
+      - Recommendations
+      - Next steps
+      - Risk considerations
+    max_retries: 1
