@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import aiofiles
+import yaml
 
 from pipeline.config import PipelineConfig
 from pipeline.extractors import get_extractor_for_file
@@ -133,8 +134,15 @@ class PipelineProcessor:
             elif workflow_name == "code_review":
                 wf = self.orchestrator.create_code_review_workflow()
             else:
-                # Try to load from YAML if possible (could be extended)
-                raise ValueError(f"Unknown workflow: {workflow_name}")
+                # Try to load from YAML
+                workflow_path = self.config._base_path / "pipeline" / "workflows" / f"{workflow_name}.yaml"
+                if workflow_path.exists():
+                    self.logger.info(f"Loading workflow from {workflow_path}")
+                    async with aiofiles.open(workflow_path, mode='r') as f:
+                        workflow_content = await f.read()
+                        wf = yaml.safe_load(workflow_content)
+                else:
+                    raise ValueError(f"Unknown workflow: {workflow_name}")
             
             result = await self.orchestrator.execute_workflow(wf, content)
             return result.final_output, "multi-agent-workflow"

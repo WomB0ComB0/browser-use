@@ -21,6 +21,7 @@ from browser_use.browser.watchdogs.local_browser_watchdog import LocalBrowserWat
 from browser_use.browser.watchdogs.security_watchdog import SecurityWatchdog
 from browser_use.llm.google.chat import ChatGoogle
 from browser_use.utils import create_task_with_error_handling
+from langchain_core.messages import HumanMessage
 
 from pipeline.config import PipelineConfig
 
@@ -210,7 +211,7 @@ async def _wait_for_page_stability(self, pending_requests: list):
         )
 
 
-async def on_patched_browser_state_request_event(self, event: BrowserStateRequestEvent) -> BrowserStateSummary:
+async def on_patched_BrowserStateRequestEvent(self, event: BrowserStateRequestEvent) -> BrowserStateSummary:
     """Handle browser state request by coordinating DOM building and screenshot capture.
     
     PATCHED: Allows file:// URLs to be considered meaningful.
@@ -283,7 +284,7 @@ async def on_patched_browser_state_request_event(self, event: BrowserStateReques
         self.logger.error(f'Failed to get browser state: {e}')
         return _create_recovery_state(locals().get('page_url', ''), str(e))
 
-DOMWatchdog.on_BrowserStateRequestEvent = on_patched_browser_state_request_event
+DOMWatchdog.on_BrowserStateRequestEvent = on_patched_BrowserStateRequestEvent
 
 logger = logging.getLogger(__name__)
 
@@ -298,33 +299,68 @@ class BrowserExecutor:
             api_key=api_key
         )
 
-    async def fill_form(self, url: str, data: dict[str, Any]) -> str:
-        """Fills a form at the given URL with the provided data.
-        
-        Args:
-            url: The URL of the form to fill.
-            data: A dictionary containing the field mapping and values.
-            
-        Returns:
-            A summary of the execution result.
-        """
-        logger.info(f"Starting browser agent to fill form at {url}")
-        
-        # Construct the task prompt
-        data_str = json.dumps(data, indent=2)
+    async def _extract_schema(self, browser_config: BrowserProfile, url: str) -> str:
+        """Pass 1: Extracts the form schema (labels and constraints) from the page."""
         task = (
-            f"Go to {url} and fill out the application form using the following data:\n"
-            f"{data_str}\n\n"
-            f"Navigate through any multi-step forms if necessary. "
-            f"If there's a submit button, do NOT click it yet, just prepare the form and report success. "
-            f"If you encounter fields that aren't in the data, try to infer them or leave them blank."
+            f"Navigate to {url}. \n"
+            "Identify all visible input fields, textareas, and form elements. \n"
+            "Wait for the form to fully load. Scroll if necessary. \n"
+            "For each field, extract: \n"
+            "1. The exact label text.\n"
+            "2. The field type (text, email, tel, etc.).\n"
+            "3. Any constraints (e.g., 'Max 50 characters').\n"
+            "Output the results as a clean list of fields. "
+            "Do NOT fill anything yet. Just report the schema and stop."
         )
+        
+        browser = Browser(browser_profile=browser_config)
+        agent = Agent(task=task, llm=self.llm, browser=browser)
+        try:
+            result = await agent.run(max_steps=10)
+            return str(result.final_result())
+        finally:
+            await browser.kill()
+
+    async def _map_data_to_schema(self, schema: str, source_data: dict[str, Any]) -> dict[str, Any]:
+        """Pass 1.5: Uses LLM to map source data to the extracted schema labels."""
+        prompt = (
+            "You are a Form Mapping Expert. \n"
+            "Given the following FORM SCHEMA (list of labels/fields) and SOURCE DATA (JSON), "
+            "create a deterministic MAPPING JSON. \n\n"
+            f"### FORM SCHEMA:\n{schema}\n\n"
+            f"### SOURCE DATA:\n{json.dumps(source_data, indent=2)}\n\n"
+            "### RULES:\n"
+            "1. Map each source data point to the MOST RELEVANT form label.\n"
+            "2. If a field has a character limit (e.g. 50), TRUNCATE the data to fit.\n"
+            "3. Ensure distinct fields for distinct data (e.g. Founder 1 vs Founder 2).\n"
+            "4. NEVER merge two data points into one field.\n"
+            "5. If a field type is 'email', ensure the mapped value is a valid email.\n"
+            "6. Output ONLY a JSON object where keys are FORM LABELS and values are the STRINGS to type."
+        )
+        # Use the underlying LLM with a HumanMessage to avoid Pydantic errors
+        response = await self.llm.ainvoke([HumanMessage(content=prompt)])
+        content = response.completion
+        # Basic cleanup of markdown if LLM returned it
+        if "```json" in content:
+            content = content.split("```json")[1].split("```")[0].strip()
+        elif "```" in content:
+            content = content.split("```")[1].split("```")[0].strip()
+        
+        try:
+            return json.loads(content)
+        except Exception as e:
+            logger.error(f"Failed to parse mapping JSON: {e}. Content: {content}")
+            return {}
+
+    async def fill_form(self, url: str, data: dict[str, Any]) -> str:
+        """Fills a form at the given URL with the provided data using a Two-Pass strategy."""
+        logger.info(f"Starting Two-Pass browser agent to fill form at {url}")
         
         # Get browser path and user data dir from env
         config_chrome_path = os.environ.get("CHROME_PATH") or os.environ.get("BRAVE_PATH")
         config_user_data_dir = os.environ.get("USER_DATA_DIR")
 
-        profile = BrowserProfile(
+        browser_config = BrowserProfile(
             disable_security=True,
             executable_path=config_chrome_path,
             user_data_dir=config_user_data_dir,
@@ -334,25 +370,62 @@ class BrowserExecutor:
                 "--disable-setuid-sandbox"
             ]
         )
-        browser = Browser(browser_profile=profile)
 
-        agent = Agent(
-            task=task,
-            llm=self.llm,
-            browser=browser
-        )
-        
         try:
-            # No more redirection to string buffer, let it go to real stdout
-            result = await agent.run(max_steps=10)
+            # PASS 1: Extract Schema
+            logger.info("Pass 1: Extracting Form Schema...")
+            schema_text = await self._extract_schema(browser_config, url)
+            logger.debug(f"Extracted Schema: {schema_text}")
+
+            # PASS 1.5: Map Data to Schema
+            logger.info("Pass 1.5: Pre-mapping data to schema...")
+            mapping = await self._map_data_to_schema(schema_text, data)
+            mapping_str = json.dumps(mapping, indent=2)
+            logger.debug(f"Generated Mapping: {mapping_str}")
+
+            # PASS 2: Deterministic Filling
+            logger.info("Pass 2: Executing deterministic filling...")
+            # We recreate browser_config to ensure a fresh session for Pass 2 if needed
+            result_text = await self._fill_form_deterministically_internal(browser_config, url, mapping)
             
-            # We can still log the result to a file if we want
+            return result_text
+
+        except Exception as e:
+            logger.error(f"Browser agent failed during Two-Pass execution: {e}")
+            raise
+
+    async def _fill_form_deterministically_internal(self, browser_config: BrowserProfile, url: str, mapping: dict[str, Any]) -> str:
+        """Pass 2: Fills the form using a strict, label-based deterministic mapping."""
+        mapping_str = json.dumps(mapping, indent=2)
+        task = (
+            f"# TASK: Fill Application Form (DETERMINISTIC MODE)\n"
+            f" ## 1. NAVIGATION\n"
+            f" - **ACTION**: Navigate to {url} immediately.\n\n"
+            f" ## 2. MAPPING TO EXECUTE\n"
+            f" The following JSON provides the EXACT strings to type for each label:\n"
+            f" ```json\n{mapping_str}\n```\n\n"
+            f" ## 3. EXECUTION RULES\n"
+            f" - **Strict Logic**: For each key in the JSON, find the element with that EXACT label and type the value.\n"
+            f" - **ANTI-SLICING**: CLICK the field, WAIT 1 second, then TYPE to prevent first-letter cutoff.\n"
+            f" - **ANTI-HANG**: After typing, immediately `Tab` out or click outside to force save.\n"
+            f" - **No Guesswork**: DO NOT infer anything. ONLY type what is in the mapping JSON.\n"
+            f" - **Verification**: Once all fields in the JSON are filled, you are DONE.\n\n"
+            f" ## 4. COMPLETION\n"
+            f" - Verify the form is filled according to the mapping and report success."
+        )
+
+        browser = Browser(browser_profile=browser_config)
+        agent = Agent(task=task, llm=self.llm, browser=browser)
+        try:
+            result = await agent.run(max_steps=30)
+            final_result_str = str(result.final_result())
+            
+            # Log results
             async with aiofiles.open('browser_output.log', 'a') as log_f:
-                await log_f.write("\n--- Run Result ---\n")
-                await log_f.write(str(result))
+                await log_f.write(f"\n--- Run Result ({url}) ---\n")
+                await log_f.write(final_result_str)
                 await log_f.write("\n")
             
-            return str(result)
-        except Exception as e:
-            logging.error(f"Browser agent failed: {e}")
-            raise
+            return final_result_str
+        finally:
+            await browser.kill()

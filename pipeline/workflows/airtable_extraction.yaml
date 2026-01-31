@@ -1,0 +1,43 @@
+name: airtable_extraction
+description: Extract founder data for Airtable form.
+steps:
+  - name: extract_details
+    role: engineer
+    action: extract
+    prompt_template: |
+      Extract founder profiles and startup details from the input text.
+      
+      CRITICAL INSTRUCTIONS:
+      1. LOOK FOR FOUNDER INFO: The file "information.txt" contains the AUTHORITATIVE founder details (Names, Emails, Education, Phone). You MUST use the names, emails, and phone numbers from "information.txt" if available.
+      2. PERSPECTIVE: Write all descriptions (founder_roles, impressive_accomplishment, risky_decision, ideas) in the FIRST PERSON PLURAL ("We", "Our", "My co-founder and I"). Do NOT use "The founders" or "They".
+      3. OUTPUT FORMAT: Return ONLY the JSON object.
+
+      Return the output as a JSON object with the following structure:
+      {
+        "founder_1": {
+          "full_name": "string (Find precise name)",
+          "email": "string",
+          "education": "string",
+          "major": "string",
+          "linkedin": "string",
+          "phone": "string"
+        },
+        "founder_2": {
+          "full_name": "string",
+          "email": "string",
+          "education": "string",
+          "major": "string",
+          "linkedin": "string",
+          "phone": "string"
+        },
+        "founder_roles": "string (FIRST PERSON PLURAL: 'We handled...')",
+        "location": "string (infer from education or context)",
+        "hearing_about_spc": "Internet Search (default)",
+        "impressive_accomplishment": "string (FIRST PERSON PLURAL: 'We built...')",
+        "risky_decision": "string (FIRST PERSON PLURAL: 'We decided...')",
+        "ideas": "string (FIRST PERSON PLURAL: 'Our idea ResQ is...')"
+      }
+      
+      Input text:
+      From the provided documents.
+    max_retries: 2

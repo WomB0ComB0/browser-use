@@ -8,3 +8,4 @@ output/
 .vscode/
 .idea/
 data/
+.playwright-mcp

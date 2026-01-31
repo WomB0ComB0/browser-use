@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -20,6 +22,36 @@ try:
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False
+
+
+class BroadcastLogHandler(logging.Handler):
+    """Log handler that broadcasts logs to the dashboard via WebSocket."""
+    
+    def __init__(self, app: DashboardApp) -> None:
+        super().__init__()
+        self.app = app
+        self.setLevel(logging.INFO)
+    
+    def emit(self, record: logging.LogRecord) -> None:
+        """Emit a log record."""
+        try:
+            log_entry = {
+                "timestamp": datetime.fromtimestamp(record.created).strftime("%H:%M:%S"),
+                "level": record.levelname,
+                "logger": record.name,
+                "message": record.getMessage(),
+            }
+            
+            # Fire and forget mechanism to avoid blocking
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self.app.broadcast_update("log", log_entry))
+            except RuntimeError:
+                # No event loop running
+                pass
+                
+        except Exception:
+            self.handleError(record)
 
 
 class DashboardApp:
@@ -44,93 +76,112 @@ class DashboardApp:
 
         self._setup_routes()
         self._setup_static_files()
+        self._setup_log_streaming()
+
+    def _setup_log_streaming(self) -> None:
+        """Attach the broadcast log handler to the root logger."""
+        handler = BroadcastLogHandler(self)
+        logging.getLogger().addHandler(handler)
+        self.logger.info("Dashboard log streaming enabled")
 
     def _setup_routes(self) -> None:
         """Set up API routes."""
         if not self.app:
             return
 
-        @self.app.get("/", response_class=HTMLResponse)
-        async def root() -> str:
-            """Serve the dashboard HTML."""
-            return self._get_dashboard_html()
+        self.app.get("/", response_class=HTMLResponse)(self._route_root)
+        self.app.get("/api/health")(self._route_health)
+        self.app.get("/api/metrics")(self._route_metrics)
+        self.app.get("/api/history")(self._route_history)
+        self.app.get("/api/config")(self._route_config)
+        self.app.websocket("/ws")(self._route_websocket)
 
-        @self.app.get("/api/health")
-        async def health() -> dict:
-            """Health check endpoint."""
-            return {
-                "status": "healthy",
-                "timestamp": datetime.now().isoformat(),
-                "version": "1.0.0",
-            }
+    async def _route_root(self) -> str:
+        """Serve the dashboard HTML."""
+        return self._get_dashboard_html()
 
-        @self.app.get("/api/metrics")
-        async def get_metrics() -> dict:
-            """Get current metrics."""
-            # Reload from disk to catch updates from the processor
-            metrics_path = self.config.get_logs_dir() / "metrics.json"
-            if metrics_path.exists():
-                self.metrics = PipelineMetrics.from_file(metrics_path)
+    async def _route_health(self) -> dict:
+        """Health check endpoint."""
+        return {
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat(),
+            "version": "1.0.0",
+        }
+
+    async def _route_metrics(self) -> dict:
+        """Get current metrics."""
+        # Reload from disk to catch updates from the processor
+        metrics_path = self.config.get_logs_dir() / "metrics.json"
+        if metrics_path.exists():
+            self.metrics = PipelineMetrics.from_file(metrics_path)
+        
+        summary = self.metrics.get_summary()
+        return {
+            "files_processed": summary.get("files_processed", 0),
+            "files_failed": summary.get("files_failed", 0),
+            "success_rate": summary.get("success_rate_percent", 0.0) / 100.0,
+            "total_processing_time": summary.get("total_processing_time", 0.0),
+            "avg_processing_time": summary.get("average_processing_time_seconds", 0.0),
+            "total_tokens": summary.get("total_tokens", 0),
+        }
+
+    async def _route_history(self) -> dict:
+        """Get processing history."""
+        # Ensure metrics are fresh
+        metrics_path = self.config.get_logs_dir() / "metrics.json"
+        if metrics_path.exists():
+            self.metrics = PipelineMetrics.from_file(metrics_path)
             
-            summary = self.metrics.get_summary()
-            return {
-                "files_processed": summary.get("files_processed", 0),
-                "files_failed": summary.get("files_failed", 0),
-                "success_rate": summary.get("success_rate_percent", 0.0) / 100.0,
-                "total_processing_time": summary.get("total_processing_time", 0.0),
-                "avg_processing_time": summary.get("average_processing_time_seconds", 0.0),
-                "total_tokens": summary.get("total_tokens", 0),
+        history = [
+            {
+                "file_name": Path(r.file_path).name,
+                "success": r.success,
+                "processing_time": r.duration_seconds or 0.0,
             }
+            for r in reversed(self.metrics.records)
+        ]
+        return {
+            "items": history,
+            "total": len(history),
+        }
 
-        @self.app.get("/api/history")
-        async def get_history() -> dict:
-            """Get processing history."""
-            # Ensure metrics are fresh
-            metrics_path = self.config.get_logs_dir() / "metrics.json"
-            if metrics_path.exists():
-                self.metrics = PipelineMetrics.from_file(metrics_path)
-                
-            history = [
-                {
-                    "file_name": Path(r.file_path).name,
-                    "success": r.success,
-                    "processing_time": r.duration_seconds or 0.0,
-                }
-                for r in reversed(self.metrics.records)
-            ]
-            return {
-                "items": history,
-                "total": len(history),
+    async def _route_config(self) -> dict:
+        """Get current configuration (safe subset)."""
+        return {
+            "provider": self.config.generator.provider,
+            "model": self.config.generator.model,
+            "data_dir": str(self.config.directories.data),
+            "output_dir": str(self.config.directories.output),
+            "log_level": self.config.logging.level,
+        }
+
+    async def _route_websocket(self, websocket: WebSocket) -> None:
+        """WebSocket endpoint for real-time updates."""
+        await websocket.accept()
+        self._websocket_clients.append(websocket)
+        # Send initial connection success message
+        await websocket.send_text(json.dumps({
+            "type": "log",
+            "data": {
+                "timestamp": datetime.now().strftime("%H:%M:%S"),
+                "level": "INFO",
+                "logger": "Dashboard",
+                "message": "Connected to real-time log stream"
             }
+        }))
+        self.logger.info("WebSocket client connected")
 
-        @self.app.get("/api/config")
-        async def get_config() -> dict:
-            """Get current configuration (safe subset)."""
-            return {
-                "provider": self.config.generator.provider,
-                "model": self.config.generator.model,
-                "data_dir": str(self.config.directories.data),
-                "output_dir": str(self.config.directories.output),
-                "log_level": self.config.logging.level,
-            }
-
-        @self.app.websocket("/ws")
-        async def websocket_endpoint(websocket: WebSocket) -> None:
-            """WebSocket endpoint for real-time updates."""
-            await websocket.accept()
-            self._websocket_clients.append(websocket)
-            self.logger.info("WebSocket client connected")
-
-            try:
-                while True:
-                    # Keep connection alive and receive any client messages
-                    data = await websocket.receive_text()
-                    # Handle client messages if needed
-                    if data == "ping":
-                        await websocket.send_text("pong")
-            except WebSocketDisconnect:
+        try:
+            while True:
+                # Keep connection alive and receive any client messages
+                data = await websocket.receive_text()
+                # Handle client messages if needed
+                if data == "ping":
+                    await websocket.send_text("pong")
+        except WebSocketDisconnect:
+            if websocket in self._websocket_clients:
                 self._websocket_clients.remove(websocket)
-                self.logger.info("WebSocket client disconnected")
+            self.logger.info("WebSocket client disconnected")
 
     def _setup_static_files(self) -> None:
         """Mount static files directory."""
@@ -149,11 +200,16 @@ class DashboardApp:
             "timestamp": datetime.now().isoformat(),
         })
 
+        # Filter out closed connections before sending
+        active_clients = []
         for client in self._websocket_clients:
             try:
                 await client.send_text(message)
-            except Exception as e:
-                self.logger.error(f"Failed to send WebSocket message: {e}")
+                active_clients.append(client)
+            except Exception:
+                # Connection likely closed
+                pass
+        self._websocket_clients = active_clients
 
     async def notify_file_processed(
         self, file_name: str, success: bool, processing_time: float
@@ -199,6 +255,7 @@ class DashboardApp:
             --success: #10b981;
             --error: #ef4444;
             --warning: #f59e0b;
+            --info: #3b82f6;
         }
         
         * {
@@ -212,12 +269,16 @@ class DashboardApp:
             background: var(--bg-primary);
             color: var(--text-primary);
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
         
         .container {
             max-width: 1400px;
             margin: 0 auto;
             padding: 2rem;
+            flex: 1;
+            width: 100%;
         }
         
         header {
@@ -299,21 +360,41 @@ class DashboardApp:
             margin-top: 0.25rem;
         }
         
+        .grid-split {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+        
+        @media (max-width: 1024px) {
+            .grid-split {
+                grid-template-columns: 1fr;
+            }
+        }
+        
         .section-title {
             font-size: 1.25rem;
             margin-bottom: 1rem;
             color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }
         
-        .recent-activity {
+        .panel {
             background: var(--bg-card);
             border-radius: 16px;
             padding: 1.5rem;
             border: 1px solid rgba(255,255,255,0.05);
+            height: 500px;
+            display: flex;
+            flex-direction: column;
         }
         
         .activity-list {
             list-style: none;
+            overflow-y: auto;
+            flex: 1;
         }
         
         .activity-item {
@@ -356,10 +437,67 @@ class DashboardApp:
             font-size: 0.875rem;
         }
         
+        /* Log Console Styles */
+        .log-console {
+            background: #000000;
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.8rem;
+            color: #d4d4d4;
+            overflow-y: auto;
+            flex: 1;
+            scroll-behavior: smooth;
+        }
+        
+        .log-entry {
+            margin-bottom: 0.25rem;
+            line-height: 1.4;
+            word-wrap: break-word;
+        }
+        
+        .log-time {
+            color: #569cd6;
+            margin-right: 0.5rem;
+        }
+        
+        .log-level {
+            display: inline-block;
+            width: 60px;
+            font-weight: bold;
+        }
+        
+        .level-INFO { color: var(--success); }
+        .level-WARNING { color: var(--warning); }
+        .level-ERROR { color: var(--error); }
+        .level-DEBUG { color: var(--text-secondary); }
+        
+        .log-logger {
+            color: #c586c0;
+            margin-right: 0.5rem;
+        }
+        
         .empty-state {
             text-align: center;
             padding: 3rem;
             color: var(--text-secondary);
+        }
+        
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: var(--bg-card); 
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.1); 
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.2); 
         }
     </style>
 </head>
@@ -396,18 +534,36 @@ class DashboardApp:
             </div>
         </div>
         
-        <h2 class="section-title">Recent Activity</h2>
-        <div class="recent-activity">
-            <ul class="activity-list" id="activity-list">
-                <li class="empty-state">No recent activity</li>
-            </ul>
+        <div class="grid-split">
+            <div>
+                <h2 class="section-title">Recent Activity</h2>
+                <div class="panel">
+                    <ul class="activity-list" id="activity-list">
+                        <li class="empty-state">No recent activity</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div>
+                <h2 class="section-title">
+                    Live Logs
+                    <button onclick="clearLogs()" style="background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:0.8rem;">Clear</button>
+                </h2>
+                <div class="panel" style="padding: 0; overflow: hidden;">
+                    <div class="log-console" id="log-console">
+                        <div class="log-entry"><span class="log-time">System</span> <span class="log-level level-INFO">INFO</span> Waiting for logs...</div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     
     <script>
         const ws = new WebSocket(`ws://${window.location.host}/ws`);
         const activityList = document.getElementById('activity-list');
+        const logConsole = document.getElementById('log-console');
         const activities = [];
+        const MAX_LOGS = 500;
         
         ws.onopen = () => {
             document.getElementById('connection-status').textContent = 'Connected';
@@ -427,6 +583,8 @@ class DashboardApp:
                 addActivity(message.data);
             } else if (message.type === 'metrics_update') {
                 updateMetrics(message.data);
+            } else if (message.type === 'log') {
+                addLog(message.data);
             }
         };
         
@@ -486,6 +644,41 @@ class DashboardApp:
                     <span class="activity-time">${a.processing_time.toFixed(2)}s</span>
                 </li>
             `).join('');
+        }
+        
+        function addLog(data) {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            
+            // Format log level class (INFO, WARNING, ERROR, DEBUG)
+            const levelClass = `level-${data.level}`;
+            
+            entry.innerHTML = `
+                <span class="log-time">${data.timestamp}</span>
+                <span class="log-level ${levelClass}">${data.level}</span>
+                <span class="log-logger">[${data.logger}]</span>
+                <span class="log-message">${escapeHtml(data.message)}</span>
+            `;
+            
+            logConsole.appendChild(entry);
+            
+            // Auto-scroll to bottom
+            logConsole.scrollTop = logConsole.scrollHeight;
+            
+            // Prune old logs
+            if (logConsole.children.length > MAX_LOGS) {
+                logConsole.removeChild(logConsole.firstChild);
+            }
+        }
+        
+        function clearLogs() {
+            logConsole.innerHTML = '';
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
         
         // Refresh metrics every 30 seconds

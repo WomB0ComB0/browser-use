@@ -43,12 +43,26 @@ class OllamaGenerator(BaseGenerator):
 
         # Build the prompt
         prompt = self._build_prompt(content)
+        
+        # Performance parameters optimized for Llama 3 if detected
+        options = {
+            "num_predict": self.config.generator.max_tokens,
+            "temperature": self.config.generator.temperature,
+        }
+        
+        if "llama3" in self.model_name.lower():
+            # Llama 3 often benefits from higher context if available and specific stop tokens
+            options.update({
+                "num_ctx": 8192, # Expanded context for Llama 3
+                "stop": ["<|eot_id|>", "assistant"],
+            })
 
         # Generate response
         try:
             response = await self.client.chat(
                 model=self.model_name,
                 messages=[{"role": "user", "content": prompt}],
+                options=options,
             )
             instructions: str = response.message.content or ""
 
@@ -84,7 +98,7 @@ class OllamaGenerator(BaseGenerator):
         """Build the prompt for instruction generation."""
         # Get template from config
         template = self.config.generator.instruction_template
-
+        
         # Format structure info
         structure_info = ""
         if content.structure:
@@ -115,7 +129,13 @@ class OllamaGenerator(BaseGenerator):
             summary=content.summary,
         )
 
-        return f"{prompt}\n\n{context}"
+        final_prompt = f"{prompt}\n\n{context}"
+        
+        # Llama 3 usually works well with raw text, but if we need specific tags:
+        # if "llama3" in self.model_name.lower():
+        #    return f"<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n{final_prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+            
+        return final_prompt
 
     def _format_structure(
         self, structure: MarkdownStructure | CsvStructure | JsonStructure | dict[str, Any]

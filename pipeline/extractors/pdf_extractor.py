@@ -32,8 +32,8 @@ class PdfExtractor(BaseExtractor):
 
     SUPPORTED_EXTENSIONS = [".pdf"]
 
-    def can_extract(self, file_path: Path) -> bool:
-        """Check if this extractor can handle the file."""
+    def supports(self, file_path: Path) -> bool:
+        """Check if this extractor supports the given file."""
         return file_path.suffix.lower() in self.SUPPORTED_EXTENSIONS
 
     def extract(self, file_path: Path) -> ExtractedContent:

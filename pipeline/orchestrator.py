@@ -119,28 +119,32 @@ class AgentOrchestrator:
         errors = []
 
         steps = workflow.get("steps", [])
+        parallel_groups = workflow.get("parallel_steps", [])
 
-        for step in steps:
-            step_name = step.get("name", "unnamed_step")
-            role_str = step.get("role", "engineer")
-            role = AgentRole(role_str.lower())
+        # Create a map for quick lookup of step definitions
+        step_map = {s.get("name"): s for s in steps}
 
-            self.logger.info(f"Executing step: {step_name} with role: {role.value}")
+        # Determine execution order
+        execution_plan = self._build_execution_plan(steps, parallel_groups)
 
-            try:
-                result = await self._execute_step(step, role, context)
-                context.add_result(step_name, result)
-                agent_outputs[step_name] = result
-                steps_completed.append(step_name)
+        for group in execution_plan:
+            # Resolve step definitions for this group
+            group_steps = []
+            for name in group:
+                if name in step_map:
+                    group_steps.append(step_map[name])
+                else:
+                    self.logger.warning(f"Step '{name}' in parallel_steps not found in steps definition.")
 
-            except Exception as e:
-                error_msg = f"Step {step_name} failed: {e}"
-                self.logger.error(error_msg)
-                errors.append(error_msg)
+            if not group_steps:
+                continue
 
-                if step.get("max_retries", 0) > 0:
-                    # Could implement retry logic here
-                    pass
+            self.logger.info(f"Executing step group: {group}")
+
+            group_errors = await self._execute_step_group(
+                group_steps, context, agent_outputs, steps_completed
+            )
+            errors.extend(group_errors)
 
         # Calculate execution time
         execution_time = (datetime.now() - context.start_time).total_seconds()
@@ -167,6 +171,51 @@ class AgentOrchestrator:
             agent_outputs=agent_outputs,
             errors=errors,
         )
+
+    def _build_execution_plan(self, steps: list[WorkflowStep], parallel_groups: list[list[str]]) -> list[list[str]]:
+        """Build the execution plan based on sequential or parallel configuration."""
+        if parallel_groups:
+            return parallel_groups
+        # Default to sequential execution of all defined steps
+        return [[s.get("name")] for s in steps if s.get("name")]
+
+    async def _execute_step_group(
+        self,
+        group_steps: list[WorkflowStep],
+        context: AgentContext,
+        agent_outputs: dict[str, str],
+        steps_completed: list[str]
+    ) -> list[str]:
+        """Execute a group of steps (parallel or single) and return errors."""
+        errors = []
+        try:
+            if len(group_steps) > 1:
+                # Execute in parallel
+                results = await self.execute_parallel_steps(group_steps, context)
+                for step_name, result in results.items():
+                    context.add_result(step_name, result)
+                    agent_outputs[step_name] = result
+                    steps_completed.append(step_name)
+            else:
+                # Execute single step
+                step = group_steps[0]
+                step_name = step.get("name", "unnamed_step")
+                role_str = step.get("role", "engineer")
+                role = AgentRole(role_str.lower())
+
+                self.logger.info(f"Executing step: {step_name} with role: {role.value}")
+                
+                result = await self._execute_step(step, role, context)
+                context.add_result(step_name, result)
+                agent_outputs[step_name] = result
+                steps_completed.append(step_name)
+
+        except Exception as e:
+            error_msg = f"Step group execution failed: {e}"
+            self.logger.error(error_msg)
+            errors.append(error_msg)
+            
+        return errors
 
     async def _execute_step(
         self, step: WorkflowStep, role: AgentRole, context: AgentContext

@@ -1,0 +1,50 @@
+name: demo_parallel_workflow
+description: >
+  A demo workflow to verify parallel execution capabilities.
+  It simulates researching a topic from two angles simultaneously.
+
+steps:
+  - name: topic_definition
+    role: planner
+    action: analyze
+    prompt_template: |
+      Define the core questions for researching: {input_topic}
+      Output 3 key questions.
+    max_retries: 1
+
+  - name: Research_Technical
+    role: engineer
+    action: research
+    input_from: topic_definition
+    prompt_template: |
+      Research the TECHNICAL aspects of the questions provided.
+      Focus on architecture, performance, and scalability.
+      
+      Input: {previous_output}
+    max_retries: 1
+
+  - name: Research_Market
+    role: engineer
+    action: research
+    input_from: topic_definition
+    prompt_template: |
+      Research the MARKET aspects of the questions provided.
+      Focus on competitors, pricing, and user adoption.
+      
+      Input: {previous_output}
+    max_retries: 1
+
+  - name: Synthesis
+    role: thinker
+    action: synthesize
+    input_from: [Research_Technical, Research_Market]
+    prompt_template: |
+      Synthesize the findings from both Technical and Market research.
+      Create a comprehensive report.
+      
+      Technical Findings: {Research_Technical}
+      Market Findings: {Research_Market}
+    max_retries: 1
+
+parallel_steps:
+  - [Research_Technical, Research_Market]
