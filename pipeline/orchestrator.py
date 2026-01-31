@@ -5,7 +5,6 @@ import json
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from pipeline.config import PipelineConfig
@@ -14,27 +13,17 @@ from pipeline.generators import get_generator
 from pipeline.generators.base import BaseGenerator, GeneratedInstructions
 from pipeline.memory.pinecone_service import PineconeMemory
 from pipeline.utils.logging import get_logger
-from pipeline.utils.models import get_model_for_role
+from pipeline.utils.models import AgentRole, get_model_for_role
 
 if TYPE_CHECKING:
     from logging import Logger
-
-
-class AgentRole(str, Enum):
-    """Roles for specialized agents in the orchestration pipeline."""
-
-    PLANNER = "planner"
-    ENGINEER = "engineer"
-    TESTER = "tester"
-    REVIEWER = "reviewer"
-    THINKER = "thinker"
 
 
 class WorkflowStep(TypedDict, total=False):
     """Definition of a single step in a workflow."""
 
     name: str
-    role: str
+    role: AgentRole | str
     action: str
     input_from: str | None
     prompt_template: str

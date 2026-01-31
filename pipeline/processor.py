@@ -9,6 +9,7 @@ import yaml
 
 from pipeline.config import PipelineConfig
 from pipeline.extractors import get_extractor_for_file
+from pipeline.extractors.base import ExtractedContent
 from pipeline.generators import BaseGenerator, get_generator
 from pipeline.memory.pinecone_service import PineconeMemory
 from pipeline.utils.logging import get_logger, setup_logging
@@ -126,7 +127,7 @@ class PipelineProcessor:
             self.metrics.end_processing(success=False, error=str(e))
             return False
 
-    async def _run_workflow(self, content, workflow_name: str | None) -> tuple[str, str]:
+    async def _run_workflow(self, content: ExtractedContent, workflow_name: str | None) -> tuple[str, str]:
         """Run a workflow or standard generation."""
         if workflow_name and self.orchestrator:
             if workflow_name == "startup_application":

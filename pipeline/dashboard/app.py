@@ -96,11 +96,11 @@ class DashboardApp:
         self.app.get("/api/config")(self._route_config)
         self.app.websocket("/ws")(self._route_websocket)
 
-    async def _route_root(self) -> str:
+    def _route_root(self) -> str:
         """Serve the dashboard HTML."""
         return self._get_dashboard_html()
 
-    async def _route_health(self) -> dict:
+    def _route_health(self) -> dict:
         """Health check endpoint."""
         return {
             "status": "healthy",
@@ -108,7 +108,7 @@ class DashboardApp:
             "version": "1.0.0",
         }
 
-    async def _route_metrics(self) -> dict:
+    def _route_metrics(self) -> dict:
         """Get current metrics."""
         # Reload from disk to catch updates from the processor
         metrics_path = self.config.get_logs_dir() / "metrics.json"
@@ -125,7 +125,7 @@ class DashboardApp:
             "total_tokens": summary.get("total_tokens", 0),
         }
 
-    async def _route_history(self) -> dict:
+    def _route_history(self) -> dict:
         """Get processing history."""
         # Ensure metrics are fresh
         metrics_path = self.config.get_logs_dir() / "metrics.json"
@@ -145,7 +145,7 @@ class DashboardApp:
             "total": len(history),
         }
 
-    async def _route_config(self) -> dict:
+    def _route_config(self) -> dict:
         """Get current configuration (safe subset)."""
         return {
             "provider": self.config.generator.provider,

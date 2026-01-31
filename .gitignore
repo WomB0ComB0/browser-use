@@ -9,3 +9,4 @@ output/
 .idea/
 data/
 .playwright-mcp
+.mypy_cache

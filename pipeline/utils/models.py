@@ -5,6 +5,17 @@ import os
 import re
 import subprocess
 import time
+from enum import Enum
+
+
+class AgentRole(str, Enum):
+    """Roles for specialized agents in the orchestration pipeline."""
+
+    PLANNER = "planner"
+    ENGINEER = "engineer"
+    TESTER = "tester"
+    REVIEWER = "reviewer"
+    THINKER = "thinker"
 
 # Version: 1.2
 CACHE_FILE = os.path.expanduser("~/.cache/ralph/model_segments.json")
@@ -125,13 +136,14 @@ def _format_model_name(model: str) -> str:
     return model
 
 
-def get_model_for_role(role: str) -> str:
+def get_model_for_role(role: AgentRole | str) -> str:
     """Retrieve the best model for a given role, using cache if valid."""
     segments = _load_model_segments()
     if not segments:
         return DEFAULT_MODEL
 
-    role_models = segments.get(role.upper(), [])
+    role_str = role.value if isinstance(role, AgentRole) else role
+    role_models = segments.get(role_str.upper(), [])
     if not role_models:
         return DEFAULT_MODEL
 
