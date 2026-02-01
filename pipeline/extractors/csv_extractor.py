@@ -1,3 +1,9 @@
+"""Extraction logic for CSV and TSV files.
+
+Supports automatic delimiter detection and detailed column analysis, including
+type detection (integer, number, boolean, string) and basic statistics.
+"""
+
 from __future__ import annotations
 
 import csv
@@ -9,6 +15,16 @@ from pipeline.extractors.base import BaseExtractor, ExtractedContent, FileMetada
 
 
 class ColumnInfo(TypedDict):
+    """Statistical and type information for a single CSV column.
+
+    Attributes:
+        name: Header name of the column.
+        type: Detected data type (number, integer, boolean, string, empty).
+        non_null_count: Number of cells containing data.
+        null_count: Number of empty cells.
+        unique_count: Number of distinct values found.
+        sample_values: A few unique example values from the column.
+    """
     name: str
     type: str
     non_null_count: int
@@ -18,6 +34,15 @@ class ColumnInfo(TypedDict):
 
 
 class CsvStructure(TypedDict):
+    """Complete structural overview of a CSV file.
+
+    Attributes:
+        headers: List of all column headers.
+        row_count: Total number of data rows (excluding header).
+        column_count: Number of columns detected.
+        columns: Detailed analysis for each column.
+        preview: A small text preview of the file content.
+    """
     headers: list[str]
     row_count: int
     column_count: int
@@ -26,7 +51,11 @@ class CsvStructure(TypedDict):
 
 
 class CsvExtractor(BaseExtractor):
-    """Extractor for CSV files."""
+    """Handler for extracting content and structural insights from CSV/TSV files.
+
+    Performs dialect sniffing to handle different delimiters and provides a 
+    comprehensive schema analysis of the tabular data.
+    """
     
     SUPPORTED_EXTENSIONS = {".csv", ".tsv"}
     

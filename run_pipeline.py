@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+"""Convenience entry point for the pipeline CLI.
+
+Maps the global execution context to the internal typer application defined 
+in `pipeline.cli`.
+"""
 """Main entry point for the Enterprise Data Pipeline."""
 
 import sys

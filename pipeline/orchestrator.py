@@ -1,3 +1,10 @@
+"""Multi-agent orchestration for complex data processing workflows.
+
+This module provides the logic for coordinating multiple AI agents with different
+roles (planner, engineer, tester, etc.) to execute sequential or parallel steps
+for advanced document analysis and processing.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -41,7 +48,14 @@ class WorkflowConfig(TypedDict, total=False):
 
 @dataclass
 class AgentContext:
-    """Context passed between agents during workflow execution."""
+    """State and context shared between agents during a workflow execution.
+
+    Attributes:
+        original_content: The initial data extracted from the source file.
+        intermediate_results: Map of step names to their respective text outputs.
+        metadata: Arbitrary storage for persistent execution data.
+        start_time: Timestamp when the workflow began.
+    """
 
     original_content: ExtractedContent
     intermediate_results: dict[str, str] = field(default_factory=dict)
@@ -59,7 +73,17 @@ class AgentContext:
 
 @dataclass
 class WorkflowResult:
-    """Result of a complete workflow execution."""
+    """The final outcome of a multi-agent workflow execution.
+
+    Attributes:
+        workflow_name: Name of the executed workflow.
+        success: Whether all steps completed without unhandled exceptions.
+        steps_completed: List of names of steps that were executed.
+        final_output: The text output from the last step or a combined result.
+        execution_time_seconds: Total duration of the workflow execution.
+        agent_outputs: Map of step names to their individual text results.
+        errors: List of error messages encountered during execution.
+    """
 
     workflow_name: str
     success: bool
@@ -73,7 +97,12 @@ class WorkflowResult:
 
 
 class AgentOrchestrator:
-    """Orchestrates multiple AI agents for complex workflows."""
+    """Coordinator for multi-agent workflows.
+
+    Responsible for managing agent roles, mapping them to appropriate models,
+    executing steps in planned order (sequential or parallel), and maintaining
+    execution context.
+    """
 
     def __init__(self, config: PipelineConfig) -> None:
         self.config = config
@@ -99,7 +128,15 @@ class AgentOrchestrator:
     async def execute_workflow(
         self, workflow: WorkflowConfig, content: ExtractedContent
     ) -> WorkflowResult:
-        """Execute a complete multi-agent workflow."""
+        """Run a predefined workflow on the given content.
+
+        Args:
+            workflow: The workflow configuration defining steps and roles.
+            content: The input data to process.
+
+        Returns:
+            A WorkflowResult containing detailed execution info and final output.
+        """
         self.logger.info(f"Starting workflow: {workflow.get('name', 'unnamed')}")
 
         context = AgentContext(original_content=content)
@@ -264,7 +301,17 @@ class AgentOrchestrator:
         return outputs
 
     def extract_json_from_output(self, output: str) -> dict[str, Any] | None:
-        """Extract JSON block from agent output."""
+        """Attempt to extract and parse a JSON block from agent text output.
+
+        Prioritizes code blocks (```json ... ```) but will attempt to find
+        braced objects if no code blocks are present.
+
+        Args:
+            output: The raw text output from an agent.
+
+        Returns:
+            A parsed dictionary if successful, None otherwise.
+        """
         try:
             # Look for JSON between code blocks
             match = re.search(r"```json\s*(.*?)\s*```", output, re.DOTALL)

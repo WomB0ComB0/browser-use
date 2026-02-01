@@ -1,3 +1,11 @@
+"""Advanced browser automation and monkey-patching for the pipeline.
+
+This module provides the `BrowserExecutor` which implements a robust Two-Pass
+form-filling strategy. It also contains several monkey-patches for the 
+`browser-use` library to enable features like local file:// URL access, 
+improved stability tracking, and custom launch logging.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -28,7 +36,12 @@ from pipeline.config import PipelineConfig
 # Monkey-patch SecurityWatchdog to allow file:// URLs
 _original_is_url_allowed = SecurityWatchdog._is_url_allowed
 
-def _patched_is_url_allowed(self, url: str) -> bool:
+def _patched_is_url_allowed(self: SecurityWatchdog, url: str) -> bool:
+    """Patch for SecurityWatchdog to permit local file access.
+    
+    This override ensures that the agent can interact with local HTML files
+    and documents stored on the filesystem.
+    """
     # Always allow file:// URLs for local development
     if url.startswith('file:///'):
         return True
@@ -39,7 +52,7 @@ SecurityWatchdog._is_url_allowed = _patched_is_url_allowed
 # Monkey-patch LocalBrowserWatchdog to log launch command
 _original_launch_browser = LocalBrowserWatchdog._launch_browser
 
-async def _patched_launch_browser(self, max_retries: int = 3):
+async def _patched_launch_browser(self: LocalBrowserWatchdog, max_retries: int = 3) -> Any:
     self.logger.info(f"[LocalBrowserWatchdog] Intercepted launch! Profile args: {self.browser_session.browser_profile.get_args()}")
     return await _original_launch_browser(self, max_retries)
 
@@ -50,7 +63,7 @@ LocalBrowserWatchdog._launch_browser = _patched_launch_browser
 
 _original_on_browser_state_request = DOMWatchdog.on_BrowserStateRequestEvent
 
-async def _handle_empty_page_state(self, page_url: str, tabs_info: list, event: BrowserStateRequestEvent) -> BrowserStateSummary:
+async def _handle_empty_page_state(self: DOMWatchdog, page_url: str, tabs_info: list[PageInfo], event: BrowserStateRequestEvent) -> BrowserStateSummary:
     self.logger.debug(f'⚡ Skipping BuildDOMTree for empty target: {page_url}')
     
     # Create minimal DOM state
@@ -211,10 +224,12 @@ async def _wait_for_page_stability(self, pending_requests: list):
         )
 
 
-async def on_patched_BrowserStateRequestEvent(self, event: BrowserStateRequestEvent) -> BrowserStateSummary:
-    """Handle browser state request by coordinating DOM building and screenshot capture.
+async def on_patched_browser_state_request_event(self, event: BrowserStateRequestEvent) -> BrowserStateSummary:
+    """Coordinated browser state capture with enhanced stability and local file support.
     
-    PATCHED: Allows file:// URLs to be considered meaningful.
+    This is a patched replacement for `DOMWatchdog.on_BrowserStateRequestEvent`. 
+    It ensures that local `file://` URLs are treated as valid states and 
+    implements extra wait logic for network stability before capturing the DOM.
     """
     try:
         self.logger.debug('🔍 DOMWatchdog.on_BrowserStateRequestEvent: STARTING browser state request (PATCHED)')
@@ -284,14 +299,20 @@ async def on_patched_BrowserStateRequestEvent(self, event: BrowserStateRequestEv
         self.logger.error(f'Failed to get browser state: {e}')
         return _create_recovery_state(locals().get('page_url', ''), str(e))
 
-DOMWatchdog.on_BrowserStateRequestEvent = on_patched_BrowserStateRequestEvent
+DOMWatchdog.on_BrowserStateRequestEvent = on_patched_browser_state_request_event
 
 logger = logging.getLogger(__name__)
 
 class BrowserExecutor:
-    """Automates browser interactions based on structured data."""
+    """High-level browser automation engine for form filling.
+
+    Extends the base agent capabilities by implementing a Two-Pass strategy:
+    1. Schema Extraction: Discovering field labels and constraints.
+    2. Data Mapping: Using an LLM to map source data to the discovered schema.
+    3. Deterministic Filling: Executing precise interactions to fill the form.
+    """
     
-    def __init__(self, config: PipelineConfig):
+    def __init__(self, config: PipelineConfig) -> None:
         self.config = config
         api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         self.llm = ChatGoogle(

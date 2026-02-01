@@ -1,3 +1,10 @@
+"""File system monitoring and event handling for the processing pipeline.
+
+This module uses the Watchdog library to observe directories for new or
+modified files, applying a debouncing mechanism to prevent redundant
+processing of rapidly changing files.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -16,7 +23,11 @@ if TYPE_CHECKING:
 
 
 class DebouncedHandler(FileSystemEventHandler):
-    """File system event handler with debouncing."""
+    """Event handler that delays and debounces file system events.
+
+    This prevents the pipeline from processing a file multiple times while it's
+    still being written by the OS or another application.
+    """
     
     def __init__(
         self,
@@ -86,7 +97,11 @@ class DebouncedHandler(FileSystemEventHandler):
 
 
 class FileWatcher:
-    """Watch directories for file changes and trigger processing."""
+    """Wrapper around Watchdog Observer for pipeline-specific monitoring.
+
+    Manages the lifecycle of directory watching, handles event dispatching via
+    DebouncedHandler, and provides utility to scan for existing files.
+    """
     
     def __init__(
         self,

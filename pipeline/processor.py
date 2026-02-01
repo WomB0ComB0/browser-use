@@ -1,3 +1,10 @@
+"""Core processing logic for the Data Processing Pipeline.
+
+This module coordinates the overall flow of data: watching for file changes,
+extracting content from various file formats, orchestrating AI agents,
+and managing persistent metrics and memory.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -23,7 +30,12 @@ if TYPE_CHECKING:
 
 
 class PipelineProcessor:
-    """Main pipeline processor that coordinates extraction and generation."""
+    """The central engine of the pipeline.
+
+    Coordinates directory monitoring, file extraction, AI processing (single or
+    multi-agent), and output storage. It uses an asynchronous model with a
+    worker queue for efficient parallel processing.
+    """
     
     def __init__(self, config: PipelineConfig) -> None:
         self.config = config
@@ -128,7 +140,20 @@ class PipelineProcessor:
             return False
 
     async def _run_workflow(self, content: ExtractedContent, workflow_name: str | None) -> tuple[str, str]:
-        """Run a workflow or standard generation."""
+        """Execute either a multi-agent workflow or a standard LLM generation.
+
+        Args:
+            content: The extracted data to process.
+            workflow_name: Name of the workflow to run. If None, performs 
+                standard single-agent generation.
+
+        Returns:
+            A tuple of (text_output, model_identifier).
+
+        Raises:
+            ValueError: If an unknown workflow name is provided.
+            RuntimeError: If the generator is not initialized.
+        """
         if workflow_name and self.orchestrator:
             if workflow_name == "startup_application":
                 wf = self.orchestrator.create_startup_application_workflow()
@@ -156,7 +181,16 @@ class PipelineProcessor:
         return instr_result.instructions, instr_result.model_used
 
     async def _save_execution_output(self, file_path: Path, workflow_name: str | None, content: str) -> Path:
-        """Save execution output to a markdown file."""
+        """Persist the agent output to a markdown file in the output directory.
+
+        Args:
+            file_path: Original source file path (used for naming).
+            workflow_name: Optional workflow name (used for naming).
+            content: The text content to write.
+
+        Returns:
+            The absolute Path to the newly created markdown file.
+        """
         output_name = f"{file_path.stem}_{workflow_name if workflow_name else 'instructions'}.md"
         if not output_name.endswith(".md"):
             output_name += ".md"
@@ -231,10 +265,11 @@ class PipelineProcessor:
             self.logger.warning(f"Queue full, skipping: {file_path}")
     
     async def start(self, process_existing: bool = True) -> None:
-        """Start the pipeline.
-        
+        """Launch the pipeline, workers, and file system monitoring.
+
         Args:
-            process_existing: Whether to process existing files in data folder.
+            process_existing: If True, all files currently in the data directory
+                will be queued for processing immediately.
         """
         self.initialize()
         
@@ -286,7 +321,7 @@ class PipelineProcessor:
         print(self.metrics.print_summary())
     
     async def run(self) -> None:
-        """Run the pipeline until interrupted."""
+        """Blocking call that runs the pipeline until a shutdown signal is received."""
         await self.start()
         
         try:

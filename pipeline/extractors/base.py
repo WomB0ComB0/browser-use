@@ -1,3 +1,10 @@
+"""Base classes and types for all file extractors.
+
+This module defines the interface that all specialized extractors (PDF, Excel, 
+CSV, etc.) must implement, along with standardized containers for extracted
+data and metadata.
+"""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -8,7 +15,13 @@ from typing import Any, TypedDict
 
 
 class FileMetadata(TypedDict):
-    """Common file metadata."""
+    """Encapsulation of common file system attributes.
+
+    Attributes:
+        file_size_bytes: Size of the file in bytes.
+        modified_time: Last modification timestamp.
+        created_time: Creation timestamp.
+    """
     file_size_bytes: int
     modified_time: datetime
     created_time: datetime
@@ -16,7 +29,18 @@ class FileMetadata(TypedDict):
 
 @dataclass
 class ExtractedContent:
-    """Container for extracted file content and metadata."""
+    """Standardized container for data extracted from a file.
+
+    Attributes:
+        content: The primary text content extracted from the file.
+        summary: A brief snippet or summary of the content for quick preview.
+        file_path: Absolute path to the source file.
+        file_type: String identifier for the file format (e.g., 'PDF', 'CSV').
+        file_size_bytes: Size of the source file.
+        modified_time: Timestamp of last file modification.
+        structure: Optional dictionary representing hierarchical or tabular data.
+        metadata: Additional extractor-specific or system metadata.
+    """
     
     # Core content
     content: str
@@ -46,7 +70,11 @@ class ExtractedContent:
 
 
 class BaseExtractor(ABC):
-    """Abstract base class for file content extractors."""
+    """Abstract base class for all file extraction implementations.
+
+    Provides common utilities for metadata gathering and summary creation
+    shared across different file format handlers.
+    """
     
     @abstractmethod
     def extract(self, file_path: Path) -> ExtractedContent:

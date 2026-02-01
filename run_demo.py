@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+"""Main demo runner for the browser-use pipeline.
+
+Automates the full demo experience:
+1. Starts the FastAPI dashboard in the background.
+2. Creates a sample input file if none exists.
+3. Executes a parallel workflow processing the input.
+4. Cleans up background processes on completion.
+"""
 import os
 import subprocess
 import sys

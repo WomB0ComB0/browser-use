@@ -1,7 +1,14 @@
-import os
+"""Stand-alone demo using Google Gemini via LangChain.
+
+Demonstrates basic `agent.run()` capability using a custom wrapper for
+Gemini 2.0 Flash to ensure compatibility with `browser-use`.
+"""
+
 import asyncio
-from langchain_google_genai import ChatGoogleGenerativeAI
+import os
+
 from browser_use import Agent
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 # Ensure the API key is set
 if "GEMINI_API_KEY" not in os.environ:

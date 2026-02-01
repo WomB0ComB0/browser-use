@@ -1,3 +1,10 @@
+"""Instruction generation using Google's Gemini models.
+
+This generator integrates with Vertex AI / Google Generative AI via LangChain.
+It handles prompt construction, context window management (truncation), and
+metadata extraction from the model response.
+"""
+
 from __future__ import annotations
 
 import os
@@ -20,7 +27,12 @@ if TYPE_CHECKING:
 
 
 class GeminiGenerator(BaseGenerator):
-    """Generate instructions using Google Gemini."""
+    """Instruction generator powered by Google Gemini LLMs.
+
+    Uses LangChain's `ChatGoogleGenerativeAI` to process extracted file content 
+    and produce human-readable instructions or automated workflows. It supports
+    automatic model selection based on configured roles.
+    """
     
     def __init__(self, config: PipelineConfig) -> None:
         self.config = config

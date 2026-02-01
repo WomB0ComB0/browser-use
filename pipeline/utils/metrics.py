@@ -1,3 +1,10 @@
+"""Performance tracking and reporting utilities.
+
+Provides classes for capturing file processing events, calculating success 
+rates, measuring throughput (bytes/second), and generating human-readable 
+summaries of pipeline health.
+"""
+
 from __future__ import annotations
 
 import json
@@ -120,7 +127,7 @@ class PipelineMetrics:
             "started_at": self.started_at.isoformat(),
         }
     
-    def save(self, output_path: Path) -> None:
+    def save(self, output_path: Path | str) -> None:
         """Save metrics to a JSON file."""
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -142,8 +149,9 @@ class PipelineMetrics:
             json.dump(data, f, indent=2)
 
     @classmethod
-    def from_file(cls, input_path: Path) -> PipelineMetrics:
+    def from_file(cls, input_path: Path | str) -> PipelineMetrics:
         """Load metrics from a JSON file."""
+        input_path = Path(input_path)
         metrics = cls()
         if not input_path.exists():
             return metrics
@@ -200,9 +208,9 @@ class PipelineMetrics:
     def _format_bytes(self, size: int) -> str:
         """Format bytes to human readable."""
         for unit in ["B", "KB", "MB", "GB"]:
-            if size < 1024:
+            if size < 1024.0:
                 return f"{size:.1f} {unit}"
-            size /= 1024
+            size /= 1024.0
         return f"{size:.1f} TB"
     
     def _format_duration(self, seconds: float) -> str:

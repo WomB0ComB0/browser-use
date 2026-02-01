@@ -1,3 +1,9 @@
+"""Extraction logic for plain text and Markdown files.
+
+Handles reading text files with encoding detection and performs lightweight
+structural analysis for Markdown files to identify headers and code blocks.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,13 +13,24 @@ from pipeline.extractors.base import BaseExtractor, ExtractedContent
 
 
 class MarkdownStructure(TypedDict):
+    """Structural breakdown of a Markdown document.
+
+    Attributes:
+        headers: List of headers with their levels and text.
+        code_blocks: Count of fenced code blocks found.
+        header_count: Total number of headers extracted.
+    """
     headers: list[dict[str, int | str]]
     code_blocks: int
     header_count: int
 
 
 class TextExtractor(BaseExtractor):
-    """Extractor for plain text and markdown files."""
+    """Handler for plain text, Markdown, and reStructuredText files.
+
+    Provides robust encoding detection and specific structural parsing for 
+    Markdown to help AI models understand the document hierarchy.
+    """
     
     _MD_EXTS = {".md", ".markdown"}
     _TXT_EXTS = {".txt", ".text"}

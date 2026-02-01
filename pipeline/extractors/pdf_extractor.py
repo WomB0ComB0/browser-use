@@ -1,3 +1,10 @@
+"""Extraction logic for PDF documents.
+
+Handles text extraction from PDF files using the pypdf library. Includes a 
+heuristic-based fallback to OCR for scanned documents with minimal extractable 
+text content.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,7 +21,20 @@ except ImportError:
 
 
 class PdfStructure(TypedDict, total=False):
-    """Structure information for PDF files."""
+    """Metadata and structural manifest of a PDF document.
+
+    Attributes:
+        page_count: Total number of pages in the document.
+        title: Document title from PDF metadata.
+        author: Document author from PDF metadata.
+        subject: Document subject from PDF metadata.
+        creator: The application that created the document.
+        producer: The PDF conversion engine used.
+        creation_date: Raw creation date string.
+        has_toc: Whether the document has a table of contents (outlines).
+        is_encrypted: Whether the document requires a password or has restrictions.
+        page_sizes: Physical dimensions (width, height) for the first 5 pages.
+    """
     page_count: int
     title: str | None
     author: str | None
@@ -28,7 +48,12 @@ class PdfStructure(TypedDict, total=False):
 
 
 class PdfExtractor(BaseExtractor):
-    """Extractor for PDF files."""
+    """Handler for extracting text and metadata from PDF documents.
+
+    Attempts standard text extraction first. If the resulting text is below a 
+    certain density threshold (indicating a scanned document), it automatically
+    delegates to `OCRExtractor`.
+    """
 
     SUPPORTED_EXTENSIONS = [".pdf"]
 

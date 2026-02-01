@@ -1,3 +1,10 @@
+"""Instruction generation using local Ollama models.
+
+This generator interacts with a local Ollama server to process extracted 
+content. It includes specific optimizations for Llama 3 models, such as
+expanded context windows and specific stop tokens.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -18,7 +25,12 @@ if TYPE_CHECKING:
 
 
 class OllamaGenerator(BaseGenerator):
-    """Generate instructions using local Ollama models."""
+    """Instruction generator using local LLMs via Ollama.
+
+    Connects to an Ollama API endpoint to perform inference. This is ideal for
+    privacy-sensitive data or offline processing. It automatically handles
+    asynchronous requests to the Ollama service.
+    """
 
     def __init__(self, config: PipelineConfig) -> None:
         self.config = config

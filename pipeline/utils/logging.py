@@ -1,3 +1,10 @@
+"""Logging utilities for the AI pipeline.
+
+Provides JSON formatting for production (structured logs) and colored 
+formatting for development. Handles central logger configuration and
+standardized setup.
+"""
+
 from __future__ import annotations
 
 import json
@@ -12,7 +19,11 @@ _configured = False
 
 
 class JsonFormatter(logging.Formatter):
-    """JSON log formatter for production use."""
+    """Structured JSON log formatter.
+
+    Outputs log records as single-line JSON objects, making them easy to
+    parse by log aggregators (ELK, Datadog, etc.).
+    """
     
     def format(self, record: logging.LogRecord) -> str:
         log_data = {
@@ -41,7 +52,11 @@ class JsonFormatter(logging.Formatter):
 
 
 class ColoredFormatter(logging.Formatter):
-    """Colored console formatter for development."""
+    """Development-friendly colored terminal formatter.
+
+    Uses ANSI escape codes to highlight different log levels with distinct
+    colors for better readability during local execution.
+    """
     
     COLORS = {
         "DEBUG": "\033[36m",    # Cyan

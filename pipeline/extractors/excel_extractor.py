@@ -1,3 +1,9 @@
+"""Extraction logic for Microsoft Excel files.
+
+Handles .xlsx and .xlsm formats using the openpyxl library, extracting tabular
+data into markdown format and providing structural metadata for AI processing.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,7 +19,16 @@ except ImportError:
 
 
 class SheetInfo(TypedDict, total=False):
-    """Information about a single worksheet."""
+    """Deep structural information for a single Excel worksheet.
+
+    Attributes:
+        name: The display name of the sheet.
+        row_count: Total number of rows found.
+        column_count: Number of columns in the header row.
+        headers: List of the first 20 column headers.
+        data_types: Predicted data types for columns (numeric, date, text, etc.).
+        sample_values: First 3 rows of data for preview.
+    """
     name: str
     row_count: int
     column_count: int
@@ -23,7 +38,15 @@ class SheetInfo(TypedDict, total=False):
 
 
 class ExcelStructure(TypedDict, total=False):
-    """Structure information for Excel files."""
+    """Complete structural manifest of an Excel workbook.
+
+    Attributes:
+        sheet_count: Total number of sheets in the workbook.
+        sheet_names: Ordered list of all sheet names.
+        sheets: List of detailed SheetInfo for each sheet.
+        has_formulas: Whether the original file contained formulas (detected).
+        has_charts: Whether the original file contained charts (detected).
+    """
     sheet_count: int
     sheet_names: list[str]
     sheets: list[SheetInfo]
@@ -32,7 +55,12 @@ class ExcelStructure(TypedDict, total=False):
 
 
 class ExcelExtractor(BaseExtractor):
-    """Extractor for Excel (.xlsx) files."""
+    """Handler for extracting text and structure from Excel files.
+
+    Uses `openpyxl` to parse worksheets. For large files, it samples the content
+    to avoid overwhelming LLM context limits while still providing a structural
+    overview.
+    """
 
     SUPPORTED_EXTENSIONS = [".xlsx", ".xlsm"]
 

@@ -1,3 +1,9 @@
+"""Command Line Interface for the Enterprise Data Processing Pipeline.
+
+This module provides the primary user entry point via Typer commands for starting
+the pipeline, processing individual files, viewing configuration, and dashboard monitoring.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -26,7 +32,15 @@ _CONFIG_HELP = "Path to config file"
 
 
 def get_config(config_path: str | None = None) -> PipelineConfig:
-    """Load configuration."""
+    """Load and initialize the pipeline configuration.
+
+    Args:
+        config_path: Optional path to a YAML configuration file. If not provided,
+            will look for config.yaml in the project root.
+
+    Returns:
+        An initialized PipelineConfig instance.
+    """
     base_path = Path(__file__).parent.parent
     return PipelineConfig.load(config_path, base_path)
 
@@ -37,7 +51,17 @@ def start(
     no_existing: bool = typer.Option(False, "--no-existing", help="Don't process existing files"),
     watch: bool = typer.Option(True, "--watch", help="Watch for changes (always enabled for start)"),
 ):
-    """Start the pipeline and watch for new files."""
+    """Start the pipeline in continuous monitoring mode.
+
+    The pipeline will scan the data directory for existing files (unless disabled)
+    and then watch for new files to be added. It handles graceful shutdown on
+    SIGINT/SIGTERM.
+
+    Args:
+        config: Custom configuration path.
+        no_existing: If True, skips processing of files already in the data directory.
+        watch: Whether to watch for changes (kept for CLI compatibility).
+    """
     cfg = get_config(config)
     
     console.print(Panel.fit(
@@ -72,7 +96,13 @@ def process(
     config: str | None = typer.Option(None, "--config", "-c", help=_CONFIG_HELP),
     workflow: str | None = typer.Option(None, "--workflow", "-w", help="Workflow to run"),
 ):
-    """Process a single file."""
+    """Process a single file through the pipeline.
+
+    Args:
+        file: Path to the local file to process.
+        config: Custom configuration path.
+        workflow: Optional specific workflow name to override defaults.
+    """
     if not file.exists():
         console.print(f"[red]Error: File not found: {file}[/red]")
         raise typer.Exit(1)
@@ -167,7 +197,18 @@ def dashboard(
     host: str = typer.Option("0.0.0.0", "--host", "-H", help="Host to bind to"),
     port: int = typer.Option(8080, "--port", "-p", help="Port to bind to"),
 ):
-    """Start the web dashboard for real-time monitoring."""
+    """Start the FastAPI web dashboard.
+
+    Provides a real-time view of pipeline metrics, logs, and processing status.
+
+    Args:
+        config: Custom configuration path.
+        host: Network interface to bind the server to.
+        port: Port number to listen on.
+
+    Raises:
+        typer.Exit: If required dependencies (FastAPI, uvicorn) are missing.
+    """
     cfg = get_config(config)
 
     try:
@@ -192,7 +233,18 @@ def browser_apply(
     url: str = typer.Argument(..., help="URL of the form to fill"),
     config: str | None = typer.Option(None, "--config", "-c", help=_CONFIG_HELP),
 ):
-    """Automatically derive info from a file and fill out a web form."""
+    """Extract information from a file and use it to fill a web form.
+
+    This command orchestrates a two-step process:
+    1. Extracts structured data from the provided file using an LLM.
+    2. Launches a browser agent to navigate to the URL and fill fields
+       based on the extracted data.
+
+    Args:
+        file: Path to the input file (PDF, Excel, etc.).
+        url: The web form URL to fill.
+        config: Custom configuration path.
+    """
     if not file.exists():
         console.print(f"[red]Error: File not found: {file}[/red]")
         raise typer.Exit(1)

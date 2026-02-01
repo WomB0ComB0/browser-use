@@ -1,3 +1,10 @@
+"""Optical Character Recognition (OCR) extraction logic.
+
+This module provides a fallback extraction mechanism for images and scanned 
+PDFs using the EasyOCR library. It handles converting PDF pages to images
+for processing.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -32,7 +39,12 @@ if TYPE_CHECKING:
 
 
 class OCRExtractor(BaseExtractor):
-    """Extractor using EasyOCR for scanned documents."""
+    """Handler for extracting text from images and scanned documents.
+
+    Utilizes EasyOCR for multi-language text recognition. It works on standard
+    image formats and converts PDF documents to images page-by-page before
+    performing OCR.
+    """
 
     def __init__(self, languages: list[str] | None = None) -> None:
         self.logger: Logger = get_logger(__name__)

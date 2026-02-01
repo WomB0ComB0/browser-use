@@ -1,4 +1,10 @@
-"""JSON file extractor."""
+"""Extraction logic for JSON files.
+
+Parses JSON content, handles various encodings, and performs structural 
+analysis to provide accurate metadata about the keys and types contained 
+within the document.
+"""
+
 from __future__ import annotations
 
 import json
@@ -9,6 +15,19 @@ from pipeline.extractors.base import BaseExtractor, ExtractedContent
 
 
 class JsonStructure(TypedDict, total=False):
+    """Metadata representation of a JSON document's schema.
+
+    Attributes:
+        type: The fundamental type (object, array, string, etc.).
+        truncated: True if the analysis reached max depth.
+        keys: List of top-level keys (for objects).
+        key_count: Number of keys in the object.
+        sample_values: Nested JsonStructure for a subset of object values.
+        length: Number of items (for arrays).
+        item_types: Set of types found in the array.
+        sample: JsonStructure for the first item in an array.
+        value_preview: Truncated string representation of a primitive value.
+    """
     type: str
     truncated: bool
     keys: list[str]
@@ -21,7 +40,11 @@ class JsonStructure(TypedDict, total=False):
 
 
 class JsonExtractor(BaseExtractor):
-    """Extractor for JSON files."""
+    """Handler for extracting content and structural insights from JSON files.
+
+    Maintains the raw JSON structure but provides a summary and detailed 
+    meta-analysis of the data schema to inform AI reasoning.
+    """
     
     SUPPORTED_EXTENSIONS = {".json"}
     
